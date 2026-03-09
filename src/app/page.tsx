@@ -1,64 +1,77 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
-  Trophy, Spade, Dice5, RotateCcw,
-  ChevronRight, Crown, Swords,
+  ChevronRight, Swords, Lock,
+  Plus, LogIn, Users, ArrowLeft, KeyRound,
 } from "lucide-react";
 import { PLAYERS } from "@/lib/constants";
-import { Player, ChipCounts, Screen } from "@/lib/types";
+import { Player, GameTable, Seat } from "@/lib/types";
 import { AvatarConfig, getRandomAvatar } from "@/lib/avatar";
 import AvatarSVG from "@/components/ui/AvatarSVG";
 import AvatarCreator from "@/components/AvatarCreator";
 import PlayerIcon from "@/components/ui/PlayerIcon";
-import BlackjackGame from "@/components/games/BlackjackGame";
-import PokerGame from "@/components/games/PokerGame";
-import CrapsGame from "@/components/games/CrapsGame";
 import GameButton from "@/components/ui/GameButton";
+import MultiplayerBlackjack from "@/components/games/MultiplayerBlackjack";
 
-type AppPhase = "select-player" | "create-avatar" | "casino";
+type AppPhase =
+  | "select-player"
+  | "enter-passcode"
+  | "change-passcode"
+  | "create-avatar"
+  | "casino-lobby"
+  | "at-table";
+
+interface Session {
+  playerId: number;
+  playerName: string;
+  token: string;
+  hasChangedPasscode: boolean;
+  avatarConfig: AvatarConfig | null;
+}
+
+interface ActiveTable {
+  tableId: string;
+  joinCode: string;
+  isHost: boolean;
+}
 
 export default function Home() {
   const [appPhase, setAppPhase] = useState<AppPhase>("select-player");
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [avatars, setAvatars] = useState<Record<number, AvatarConfig>>({});
-  const [screen, setScreen] = useState<Screen>("lobby");
-  const [chipCounts, setChipCounts] = useState<ChipCounts>(() => {
-    const init: ChipCounts = {};
-    PLAYERS.forEach((p) => {
-      init[p.id] = 1000;
-    });
-    return init;
-  });
+  const [activeTable, setActiveTable] = useState<ActiveTable | null>(null);
+  const [passcode, setPasscode] = useState("");
+  const [newPasscode, setNewPasscode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [tables, setTables] = useState<(GameTable & { udm_seats: Seat[] })[]>([]);
+  const [loadingTables, setLoadingTables] = useState(false);
 
-  // Load saved state
+  // Check for saved session
   useEffect(() => {
     try {
-      const savedChips = localStorage.getItem("udm-casino-chips");
-      if (savedChips) setChipCounts(JSON.parse(savedChips));
+      const saved = localStorage.getItem("udm-casino-session");
+      if (saved) {
+        const s = JSON.parse(saved) as Session;
+        setSession(s);
+        if (s.avatarConfig) {
+          setAvatars((prev) => ({ ...prev, [s.playerId]: s.avatarConfig! }));
+        }
+        setAppPhase("casino-lobby");
+      }
       const savedAvatars = localStorage.getItem("udm-casino-avatars");
-      if (savedAvatars) setAvatars(JSON.parse(savedAvatars));
-      const savedPlayer = localStorage.getItem("udm-casino-player");
-      if (savedPlayer) {
-        const p = JSON.parse(savedPlayer);
-        setCurrentPlayer(p);
-        setAppPhase("casino");
+      if (savedAvatars) {
+        setAvatars(JSON.parse(savedAvatars));
       }
     } catch {
       // ignore
     }
   }, []);
 
-  // Save on change
-  useEffect(() => {
-    try {
-      localStorage.setItem("udm-casino-chips", JSON.stringify(chipCounts));
-    } catch {
-      // ignore
-    }
-  }, [chipCounts]);
-
+  // Save avatars
   useEffect(() => {
     try {
       localStorage.setItem("udm-casino-avatars", JSON.stringify(avatars));
@@ -67,64 +80,217 @@ export default function Home() {
     }
   }, [avatars]);
 
+  const fetchTables = useCallback(async () => {
+    setLoadingTables(true);
+    try {
+      const res = await fetch("/api/game/tables");
+      const data = await res.json();
+      setTables(data.tables || []);
+    } catch {
+      // ignore
+    }
+    setLoadingTables(false);
+  }, []);
+
+  // Load tables when in lobby
+  useEffect(() => {
+    if (appPhase === "casino-lobby") {
+      fetchTables();
+      const interval = setInterval(fetchTables, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [appPhase, fetchTables]);
+
   const handleSelectPlayer = (p: Player) => {
-    setCurrentPlayer(p);
-    if (avatars[p.id]) {
-      localStorage.setItem("udm-casino-player", JSON.stringify(p));
-      setAppPhase("casino");
-    } else {
-      setAppPhase("create-avatar");
+    setSelectedPlayer(p);
+    setPasscode("");
+    setLoginError("");
+    setAppPhase("enter-passcode");
+  };
+
+  const handleLogin = async () => {
+    if (!selectedPlayer) return;
+    setLoginError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: selectedPlayer.id, passcode }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setLoginError(data.error || "Login failed");
+        return;
+      }
+
+      const s: Session = {
+        playerId: data.player.id,
+        playerName: data.player.name,
+        token: data.token,
+        hasChangedPasscode: data.player.has_changed_passcode,
+        avatarConfig: data.player.avatar_config,
+      };
+
+      setSession(s);
+      localStorage.setItem("udm-casino-session", JSON.stringify(s));
+
+      if (data.player.avatar_config) {
+        setAvatars((prev) => ({ ...prev, [data.player.id]: data.player.avatar_config }));
+      }
+
+      // First time? Force passcode change, then avatar
+      if (!data.player.has_changed_passcode) {
+        setNewPasscode("");
+        setAppPhase("change-passcode");
+      } else if (!data.player.avatar_config) {
+        setAppPhase("create-avatar");
+      } else {
+        setAppPhase("casino-lobby");
+      }
+    } catch {
+      setLoginError("Network error");
     }
   };
 
-  const handleAvatarSave = (config: AvatarConfig) => {
-    if (!currentPlayer) return;
-    const newAvatars = { ...avatars, [currentPlayer.id]: config };
-    setAvatars(newAvatars);
-    localStorage.setItem("udm-casino-player", JSON.stringify(currentPlayer));
-    setAppPhase("casino");
+  const handleChangePasscode = async () => {
+    if (!session || !newPasscode) return;
+
+    try {
+      const res = await fetch("/api/auth/change-passcode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: session.playerId,
+          currentPasscode: passcode,
+          newPasscode,
+        }),
+      });
+
+      if (!res.ok) {
+        setLoginError("Failed to change passcode");
+        return;
+      }
+
+      const updatedSession = { ...session, hasChangedPasscode: true };
+      setSession(updatedSession);
+      localStorage.setItem("udm-casino-session", JSON.stringify(updatedSession));
+
+      // Now go to avatar creation if needed
+      if (!session.avatarConfig) {
+        setAppPhase("create-avatar");
+      } else {
+        setAppPhase("casino-lobby");
+      }
+    } catch {
+      setLoginError("Network error");
+    }
   };
 
-  const resetChips = () => {
-    const init: ChipCounts = {};
-    PLAYERS.forEach((p) => {
-      init[p.id] = 1000;
+  const handleAvatarSave = async (config: AvatarConfig) => {
+    if (!session) return;
+
+    setAvatars((prev) => ({ ...prev, [session.playerId]: config }));
+
+    // Save to server
+    await fetch("/api/auth/avatar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: session.playerId, avatarConfig: config }),
     });
-    setChipCounts(init);
+
+    const updatedSession = { ...session, avatarConfig: config };
+    setSession(updatedSession);
+    localStorage.setItem("udm-casino-session", JSON.stringify(updatedSession));
+    setAppPhase("casino-lobby");
   };
 
-  const switchPlayer = () => {
-    localStorage.removeItem("udm-casino-player");
-    setCurrentPlayer(null);
+  const createTable = async () => {
+    if (!session) return;
+
+    try {
+      const res = await fetch("/api/game/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: session.playerId,
+          playerName: session.playerName,
+          gameType: "blackjack",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setActiveTable({
+          tableId: data.table.id,
+          joinCode: data.joinCode,
+          isHost: true,
+        });
+        setAppPhase("at-table");
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleJoinTable = async (code?: string) => {
+    if (!session) return;
+    const codeToUse = code || joinCode;
+    if (!codeToUse) return;
+
+    try {
+      const res = await fetch("/api/game/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          joinCode: codeToUse,
+          playerId: session.playerId,
+          playerName: session.playerName,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setActiveTable({
+          tableId: data.table.id,
+          joinCode: data.table.join_code,
+          isHost: data.table.host_player_id === session.playerId,
+        });
+        setAppPhase("at-table");
+      } else {
+        setLoginError(data.error || "Failed to join");
+      }
+    } catch {
+      setLoginError("Network error");
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("udm-casino-session");
+    setSession(null);
+    setSelectedPlayer(null);
+    setPasscode("");
     setAppPhase("select-player");
-    setScreen("lobby");
   };
 
-  const sorted = [...PLAYERS].sort((a, b) => chipCounts[b.id] - chipCounts[a.id]);
-
-  const getAvatarOrDefault = (p: Player): AvatarConfig => {
-    return avatars[p.id] || getRandomAvatar(p.color);
+  const getAvatar = (pid: number): AvatarConfig => {
+    return avatars[pid] || getRandomAvatar(PLAYERS.find((p) => p.id === pid)?.color || "#666");
   };
 
-  // ─── SELECT PLAYER ────────────────────────────
+  const currentPlayer = session
+    ? PLAYERS.find((p) => p.id === session.playerId) || PLAYERS[0]
+    : null;
+
+  // ─── SELECT PLAYER ────────────────────────
   if (appPhase === "select-player") {
     return (
-      <div className="min-h-screen bg-casino-dark font-body max-w-[480px] mx-auto felt-texture">
+      <Shell>
         <div className="p-8">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
-          >
-            <div className="text-[11px] tracking-[4px] text-casino-gold uppercase mb-2 font-semibold">
-              Private Club
-            </div>
-            <h1 className="text-4xl font-display text-white tracking-tight mb-2">
-              UDM Casino
-            </h1>
-            <div className="text-[#555] text-xs">Who are you?</div>
-          </motion.div>
-
+          <Header subtitle="Who are you?" />
           <div className="grid grid-cols-2 gap-3">
             {PLAYERS.map((p, i) => (
               <motion.button
@@ -141,347 +307,302 @@ export default function Home() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {avatars[p.id] ? (
-                  <AvatarSVG config={avatars[p.id]} size={40} />
-                ) : (
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center"
-                    style={{ background: `${p.color}22`, border: `2px solid ${p.color}44` }}
-                  >
-                    <PlayerIcon name={p.icon} size={18} color={p.color} />
-                  </div>
-                )}
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ background: `${p.color}22`, border: `2px solid ${p.color}44` }}
+                >
+                  <PlayerIcon name={p.icon} size={18} color={p.color} />
+                </div>
                 <div>
                   <div className="text-white text-sm font-semibold">{p.name}</div>
-                  <div className="text-casino-gold text-[11px] font-mono">
-                    ${chipCounts[p.id].toLocaleString()}
-                  </div>
                 </div>
               </motion.button>
             ))}
           </div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
-  // ─── AVATAR CREATOR ────────────────────────────
+  // ─── ENTER PASSCODE ────────────────────────
+  if (appPhase === "enter-passcode" && selectedPlayer) {
+    return (
+      <Shell>
+        <div className="p-8">
+          <button onClick={() => setAppPhase("select-player")} className="text-[#555] text-xs mb-6 flex items-center gap-1">
+            <ArrowLeft size={12} /> Back
+          </button>
+          <div className="text-center mb-8">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"
+              style={{ background: `${selectedPlayer.color}22`, border: `2px solid ${selectedPlayer.color}44` }}
+            >
+              <PlayerIcon name={selectedPlayer.icon} size={28} color={selectedPlayer.color} />
+            </div>
+            <h2 className="text-xl font-bold text-white">{selectedPlayer.name}</h2>
+            <div className="text-[#555] text-xs mt-1">Enter your passcode</div>
+          </div>
+
+          <div className="max-w-[240px] mx-auto">
+            <div className="relative mb-4">
+              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555]" />
+              <input
+                type="password"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                placeholder="Passcode"
+                className="w-full bg-casino-subtle rounded-xl px-4 py-3 pl-9 text-white text-sm outline-none border border-[#333] focus:border-casino-gold transition-colors"
+                autoFocus
+              />
+            </div>
+            <GameButton onClick={handleLogin} color={selectedPlayer.color} primary className="w-full">
+              Login
+            </GameButton>
+            {loginError && (
+              <div className="text-casino-red text-xs text-center mt-3">{loginError}</div>
+            )}
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  // ─── CHANGE PASSCODE ────────────────────────
+  if (appPhase === "change-passcode" && session) {
+    return (
+      <Shell>
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <KeyRound size={32} className="text-casino-gold mx-auto mb-3" />
+            <h2 className="text-xl font-bold text-white">Set Your Passcode</h2>
+            <div className="text-[#555] text-xs mt-1">Choose a personal code so only you can log in</div>
+          </div>
+          <div className="max-w-[240px] mx-auto">
+            <input
+              type="password"
+              value={newPasscode}
+              onChange={(e) => setNewPasscode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleChangePasscode()}
+              placeholder="New passcode"
+              className="w-full bg-casino-subtle rounded-xl px-4 py-3 text-white text-sm outline-none border border-[#333] focus:border-casino-gold transition-colors mb-4"
+              autoFocus
+            />
+            <GameButton
+              onClick={handleChangePasscode}
+              color="#FFD700"
+              primary
+              className="w-full"
+              disabled={!newPasscode}
+            >
+              Set Passcode
+            </GameButton>
+            {loginError && (
+              <div className="text-casino-red text-xs text-center mt-3">{loginError}</div>
+            )}
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  // ─── CREATE AVATAR ────────────────────────
   if (appPhase === "create-avatar" && currentPlayer) {
     return (
-      <div className="min-h-screen bg-casino-dark font-body max-w-[480px] mx-auto felt-texture">
+      <Shell>
         <AvatarCreator
           player={currentPlayer}
           initialConfig={avatars[currentPlayer.id]}
           onSave={handleAvatarSave}
         />
-      </div>
+      </Shell>
     );
   }
 
-  // ─── GAME SCREENS ────────────────────────────
-  return (
-    <div className="min-h-screen bg-casino-dark font-body max-w-[480px] mx-auto relative felt-texture">
-      <AnimatePresence mode="wait">
-        {screen === "blackjack" && (
-          <motion.div key="bj" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <BlackjackGame
-              players={PLAYERS}
-              chipCounts={chipCounts}
-              setChipCounts={setChipCounts}
-              goBack={() => setScreen("lobby")}
-            />
-          </motion.div>
-        )}
-        {screen === "poker" && (
-          <motion.div key="pk" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <PokerGame
-              players={PLAYERS}
-              chipCounts={chipCounts}
-              setChipCounts={setChipCounts}
-              goBack={() => setScreen("lobby")}
-            />
-          </motion.div>
-        )}
-        {screen === "craps" && (
-          <motion.div key="cr" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <CrapsGame
-              players={PLAYERS}
-              chipCounts={chipCounts}
-              setChipCounts={setChipCounts}
-              goBack={() => setScreen("lobby")}
-            />
-          </motion.div>
-        )}
-        {screen === "leaderboard" && (
-          <motion.div key="lb" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <Leaderboard
-              sorted={sorted}
-              chipCounts={chipCounts}
-              getAvatarOrDefault={getAvatarOrDefault}
-              resetChips={resetChips}
-              goBack={() => setScreen("lobby")}
-            />
-          </motion.div>
-        )}
-        {screen === "lobby" && (
-          <motion.div key="lobby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <Lobby
-              currentPlayer={currentPlayer}
-              sorted={sorted}
-              chipCounts={chipCounts}
-              getAvatarOrDefault={getAvatarOrDefault}
-              setScreen={setScreen}
-              switchPlayer={switchPlayer}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ─── LOBBY ────────────────────────────────────
-function Lobby({
-  currentPlayer,
-  sorted,
-  chipCounts,
-  getAvatarOrDefault,
-  setScreen,
-  switchPlayer,
-}: {
-  currentPlayer: Player | null;
-  sorted: Player[];
-  chipCounts: ChipCounts;
-  getAvatarOrDefault: (p: Player) => AvatarConfig;
-  setScreen: (s: Screen) => void;
-  switchPlayer: () => void;
-}) {
-  return (
-    <div className="p-8 pb-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
-      >
-        <div className="text-[11px] tracking-[4px] text-casino-gold uppercase mb-1.5 font-semibold">
-          Private Club
-        </div>
-        <h1 className="text-4xl font-display text-white tracking-tight mb-1">
-          UDM Casino
-        </h1>
-        <div className="text-[#555] text-xs">The house always wins. Except when it doesn&apos;t.</div>
-      </motion.div>
-
-      {/* Current Player */}
-      {currentPlayer && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-3 mb-6 p-3 rounded-xl"
-          style={{
-            background: `${currentPlayer.color}11`,
-            border: `1px solid ${currentPlayer.color}22`,
+  // ─── AT TABLE ────────────────────────
+  if (appPhase === "at-table" && activeTable && session) {
+    return (
+      <Shell>
+        <MultiplayerBlackjack
+          tableId={activeTable.tableId}
+          joinCode={activeTable.joinCode}
+          playerId={session.playerId}
+          isHost={activeTable.isHost}
+          avatars={avatars}
+          goBack={() => {
+            setActiveTable(null);
+            setAppPhase("casino-lobby");
           }}
-        >
-          <AvatarSVG config={getAvatarOrDefault(currentPlayer)} size={36} />
-          <div className="flex-1">
-            <div className="text-white text-sm font-semibold">{currentPlayer.name}</div>
-            <div className="text-casino-gold text-[11px] font-mono">
-              ${chipCounts[currentPlayer.id].toLocaleString()}
-            </div>
-          </div>
-          <button
-            onClick={switchPlayer}
-            className="text-[#555] text-[11px] hover:text-white transition-colors"
-          >
-            Switch
-          </button>
-        </motion.div>
-      )}
+        />
+      </Shell>
+    );
+  }
 
-      {/* Top 3 */}
-      <div className="flex justify-center gap-5 mb-7">
-        {sorted.slice(0, 3).map((p, i) => (
+  // ─── CASINO LOBBY ────────────────────────
+  if (appPhase === "casino-lobby" && session && currentPlayer) {
+    return (
+      <Shell>
+        <div className="p-8 pb-6">
+          <Header subtitle="The house always wins. Except when it doesn't." />
+
+          {/* Current Player Bar */}
           <motion.div
-            key={p.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="text-center"
-          >
-            <div
-              className="text-[10px] font-bold mb-1"
-              style={{ color: ["#FFD700", "#C0C0C0", "#CD7F32"][i] }}
-            >
-              {i === 0 && <Crown size={12} className="inline mr-0.5 mb-0.5" />}
-              #{i + 1}
-            </div>
-            <div
-              className="rounded-full p-0.5 mb-1"
-              style={{
-                background: i === 0 ? "linear-gradient(135deg, #FFD70033, #FFD70011)" : "transparent",
-                boxShadow: i === 0 ? "0 0 20px rgba(255,215,0,0.1)" : "none",
-              }}
-            >
-              <AvatarSVG config={getAvatarOrDefault(p)} size={44} />
-            </div>
-            <div className="text-[11px] text-white font-medium">{p.name}</div>
-            <div className="text-casino-gold text-[10px] font-mono font-bold">
-              ${chipCounts[p.id].toLocaleString()}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Game Cards */}
-      <div className="flex flex-col gap-3 mb-6">
-        {[
-          {
-            id: "blackjack" as Screen,
-            name: "Blackjack",
-            desc: "Beat the dealer to 21",
-            icon: <Swords size={22} />,
-            color: "#FF6B6B",
-          },
-          {
-            id: "poker" as Screen,
-            name: "Texas Hold'em",
-            desc: "No-limit poker, winner takes all",
-            icon: <Spade size={22} />,
-            color: "#A78BFA",
-          },
-          {
-            id: "craps" as Screen,
-            name: "Craps",
-            desc: "Roll the dice, test your luck",
-            icon: <Dice5 size={22} />,
-            color: "#FB923C",
-          },
-        ].map((game, i) => (
-          <motion.button
-            key={game.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 + i * 0.08 }}
-            onClick={() => setScreen(game.id)}
-            className="flex items-center gap-3.5 rounded-2xl p-[18px] cursor-pointer text-left"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-3 mb-6 p-3 rounded-xl"
             style={{
-              background: `linear-gradient(135deg, ${game.color}11, ${game.color}06)`,
-              border: `1px solid ${game.color}33`,
+              background: `${currentPlayer.color}11`,
+              border: `1px solid ${currentPlayer.color}22`,
             }}
-            whileHover={{ scale: 1.01, x: 4 }}
-            whileTap={{ scale: 0.99 }}
           >
-            <div
-              className="w-12 h-12 rounded-[14px] flex items-center justify-center"
-              style={{ background: `${game.color}22`, color: game.color }}
-            >
-              {game.icon}
-            </div>
+            <AvatarSVG config={getAvatar(session.playerId)} size={36} />
             <div className="flex-1">
-              <div className="text-white text-base font-bold">{game.name}</div>
-              <div className="text-[#666] text-xs">{game.desc}</div>
+              <div className="text-white text-sm font-semibold">{session.playerName}</div>
             </div>
-            <ChevronRight size={18} style={{ color: game.color }} />
-          </motion.button>
-        ))}
-      </div>
+            <button onClick={logout} className="text-[#555] text-[11px] hover:text-white transition-colors">
+              Logout
+            </button>
+          </motion.div>
 
-      {/* Leaderboard Link */}
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        onClick={() => setScreen("leaderboard")}
-        className="w-full flex items-center gap-2.5 rounded-[14px] p-3.5 cursor-pointer"
-        style={{ background: "#111118", border: "1px solid #222" }}
-        whileHover={{ scale: 1.01 }}
-      >
-        <Trophy size={18} className="text-casino-gold" />
-        <span className="text-white text-sm font-semibold">Leaderboard</span>
-        <div className="flex-1" />
-        <ChevronRight size={14} className="text-[#555]" />
-      </motion.button>
-    </div>
-  );
-}
-
-// ─── LEADERBOARD ────────────────────────────────
-function Leaderboard({
-  sorted,
-  chipCounts,
-  getAvatarOrDefault,
-  resetChips,
-  goBack,
-}: {
-  sorted: Player[];
-  chipCounts: ChipCounts;
-  getAvatarOrDefault: (p: Player) => AvatarConfig;
-  resetChips: () => void;
-  goBack: () => void;
-}) {
-  return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <GameButton onClick={goBack} color="#333">
-          Back
-        </GameButton>
-        <h2 className="text-[22px] font-bold text-white m-0">Leaderboard</h2>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {sorted.map((p, i) => {
-          const chips = chipCounts[p.id];
-          const diff = chips - 1000;
-          return (
-            <motion.div
-              key={p.id}
+          {/* Create / Join */}
+          <div className="flex gap-3 mb-6">
+            <motion.button
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className="flex items-center gap-3 rounded-xl py-2.5 px-3.5"
+              onClick={createTable}
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl p-4 cursor-pointer"
               style={{
-                background: i === 0 ? "linear-gradient(135deg, rgba(255,215,0,0.07), rgba(255,215,0,0.03))" : "#111118",
-                border: `1px solid ${i === 0 ? "rgba(255,215,0,0.2)" : "#222"}`,
+                background: "linear-gradient(135deg, #FF6B6B11, #FF6B6B06)",
+                border: "1px solid #FF6B6B33",
               }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <span
-                className="text-base font-extrabold w-6 text-center font-mono"
-                style={{
-                  color: i < 3 ? ["#FFD700", "#C0C0C0", "#CD7F32"][i] : "#555",
-                }}
-              >
-                {i + 1}
-              </span>
-              <AvatarSVG config={getAvatarOrDefault(p)} size={32} />
-              <div className="flex-1">
-                <div className="text-white text-sm font-semibold">{p.name}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-casino-gold text-[15px] font-bold font-mono">
-                  ${chips.toLocaleString()}
-                </div>
-                <div
-                  className="text-[11px] font-semibold"
-                  style={{
-                    color: diff > 0 ? "#4ADE80" : diff < 0 ? "#FF6B6B" : "#555",
-                  }}
+              <Plus size={18} className="text-casino-red" />
+              <span className="text-white text-sm font-semibold">Create Table</span>
+            </motion.button>
+
+            <motion.div
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex-1"
+            >
+              <div className="flex rounded-2xl overflow-hidden" style={{ border: "1px solid #A78BFA33" }}>
+                <input
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && handleJoinTable()}
+                  placeholder="Code"
+                  className="flex-1 bg-transparent px-3 py-4 text-white text-sm font-mono outline-none placeholder:text-[#555] tracking-wider"
+                  maxLength={6}
+                />
+                <button
+                  onClick={() => handleJoinTable()}
+                  className="px-4 flex items-center"
+                  style={{ background: "rgba(167,139,250,0.15)" }}
                 >
-                  {diff > 0 ? `+$${diff}` : diff < 0 ? `-$${Math.abs(diff)}` : "Even"}
-                </div>
+                  <LogIn size={16} className="text-casino-purple" />
+                </button>
               </div>
             </motion.div>
-          );
-        })}
-      </div>
-      <button
-        onClick={resetChips}
-        className="flex items-center gap-2 mt-5 text-[11px] text-casino-red font-semibold px-3 py-2 rounded-lg"
-        style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.2)" }}
-      >
-        <RotateCcw size={12} />
-        Reset All Chips to $1,000
-      </button>
+          </div>
+
+          {loginError && (
+            <div className="text-casino-red text-xs text-center mb-4">{loginError}</div>
+          )}
+
+          {/* Active Tables */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Users size={14} className="text-[#888]" />
+              <span className="text-[#888] text-xs">
+                {loadingTables ? "Loading..." : `${tables.length} active table${tables.length !== 1 ? "s" : ""}`}
+              </span>
+            </div>
+
+            {tables.length === 0 && !loadingTables && (
+              <div className="text-center py-8 text-[#444] text-xs">
+                No active tables. Create one to get started.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              {tables.map((table, i) => {
+                const hostPlayer = PLAYERS.find((p) => p.id === table.host_player_id);
+                const seatCount = table.udm_seats?.length || 0;
+                const iAmSeated = table.udm_seats?.some((s) => s.player_id === session.playerId);
+
+                return (
+                  <motion.button
+                    key={table.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => handleJoinTable(table.join_code)}
+                    className="flex items-center gap-3 rounded-xl p-3 cursor-pointer text-left w-full"
+                    style={{
+                      background: iAmSeated ? "rgba(255,215,0,0.05)" : "#111118",
+                      border: `1px solid ${iAmSeated ? "rgba(255,215,0,0.15)" : "#222"}`,
+                    }}
+                    whileHover={{ scale: 1.01 }}
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#FF6B6B22" }}>
+                      <Swords size={18} className="text-casino-red" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-white text-sm font-semibold">
+                        {hostPlayer?.name}&apos;s Table
+                        {iAmSeated && <span className="text-casino-gold text-[10px] ml-2">JOINED</span>}
+                      </div>
+                      <div className="text-[#666] text-[11px]">
+                        {seatCount}/6 players · {table.status === "active" ? "In progress" : "Waiting"}
+                      </div>
+                    </div>
+                    <div className="flex -space-x-2">
+                      {table.udm_seats?.slice(0, 4).map((seat) => (
+                        <div key={seat.id} className="w-6 h-6 rounded-full overflow-hidden border border-casino-dark">
+                          <AvatarSVG config={getAvatar(seat.player_id)} size={24} />
+                        </div>
+                      ))}
+                    </div>
+                    <ChevronRight size={14} className="text-[#555]" />
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  return <Shell><div className="p-8 text-center text-[#555]">Loading...</div></Shell>;
+}
+
+// ─── SHARED COMPONENTS ────────────────────────
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-casino-dark font-body max-w-[480px] mx-auto relative felt-texture">
+      {children}
     </div>
+  );
+}
+
+function Header({ subtitle }: { subtitle: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="text-center mb-8"
+    >
+      <div className="text-[11px] tracking-[4px] text-casino-gold uppercase mb-1.5 font-semibold">
+        Private Club
+      </div>
+      <h1 className="text-4xl font-display text-white tracking-tight mb-1">
+        UDM Casino
+      </h1>
+      <div className="text-[#555] text-xs">{subtitle}</div>
+    </motion.div>
   );
 }

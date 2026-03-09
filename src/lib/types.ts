@@ -44,4 +44,46 @@ export interface PokerWinner {
 
 export type ChipCounts = Record<number, number>;
 
-export type Screen = "lobby" | "blackjack" | "poker" | "craps" | "leaderboard";
+export type Screen = "lobby" | "blackjack" | "poker" | "craps" | "leaderboard" | "table-lobby" | "multiplayer-blackjack";
+
+// Multiplayer types
+export interface GameTable {
+  id: string;
+  join_code: string;
+  game_type: string;
+  host_player_id: number;
+  status: string;
+  created_at: string;
+}
+
+export interface Seat {
+  id: string;
+  table_id: string;
+  player_id: number;
+  player_name: string;
+  chips: number;
+  is_connected: boolean;
+  joined_at: string;
+}
+
+export type BlackjackPhase = "waiting" | "betting" | "playing" | "results";
+
+export interface BlackjackGameState {
+  deck: CardType[];
+  dealerHand: CardType[];
+  playerHands: Record<number, HandState>;
+  bets: Record<number, number>;
+  results: Record<number, BlackjackResult> | null;
+  turnOrder: number[];
+  turnIndex: number;
+}
+
+export interface GameStateRow {
+  id: string;
+  table_id: string;
+  phase: BlackjackPhase;
+  state: BlackjackGameState;
+  current_turn_player_id: number | null;
+  version: number;
+  updated_at: string;
+}
