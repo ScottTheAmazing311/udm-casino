@@ -10,6 +10,7 @@ import Avatar from "@/components/ui/Avatar";
 import ChipStack from "@/components/ui/ChipStack";
 import GameButton from "@/components/ui/GameButton";
 import PlayerSelector from "./PlayerSelector";
+import ColbyTrainer from "./ColbyTrainer";
 
 interface BlackjackProps {
   players: Player[];
@@ -32,6 +33,7 @@ export default function BlackjackGame({
   const [bets, setBets] = useState<Record<number, number>>({});
   const [currentTurn, setCurrentTurn] = useState(0);
   const [results, setResults] = useState<Record<number, BlackjackResult>>({});
+  const [showTrainer, setShowTrainer] = useState(false);
 
   const toggleSeat = (p: Player) => {
     if (seated.find((s) => s.id === p.id)) setSeated(seated.filter((s) => s.id !== p.id));
@@ -380,6 +382,15 @@ export default function BlackjackGame({
           </GameButton>
         </motion.div>
       )}
+
+      {/* Colby Massa - Blackjack Trainer */}
+      <ColbyTrainer
+        playerCards={currentPlayer && playerHands[currentPlayer.id] ? playerHands[currentPlayer.id].cards : []}
+        dealerUpcard={dealerHand.length > 0 ? dealerHand[0] : null}
+        isActive={phase === "playing" && !!currentPlayer && playerHands[currentPlayer.id]?.status === "playing"}
+        visible={showTrainer}
+        onToggle={() => setShowTrainer(!showTrainer)}
+      />
     </div>
   );
 }
