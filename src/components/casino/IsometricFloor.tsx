@@ -104,10 +104,7 @@ export default function IsometricFloor({
           x: clamp(zone.left + zone.width / 2, BOUNDS.minX, BOUNDS.maxX),
           y: clamp(zone.top + zone.height + 4, BOUNDS.minY, BOUNDS.maxY),
         });
-        const table = casinoTables.find((t) => t.game_type === zone.gameType);
-        if (table) {
-          setTablePrompt({ gameType: zone.gameType, label: zone.label });
-        }
+        setTablePrompt({ gameType: zone.gameType, label: zone.label });
         return;
       }
     }
