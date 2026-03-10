@@ -16,6 +16,7 @@ import GameButton from "@/components/ui/GameButton";
 import ColbyTrainer from "@/components/games/ColbyTrainer";
 import RouletteTableView from "./RouletteTableView";
 import PlayerChipsSidebar from "./PlayerChipsSidebar";
+import ChatSidebar from "./ChatSidebar";
 
 interface GameTableViewProps {
   table: CasinoTable;
@@ -36,11 +37,14 @@ export default function GameTableView({
   playerId,
   onLeave,
 }: GameTableViewProps) {
+  const pName = getPlayerName(playerId);
+
   // Dispatch to roulette view
   if (table.game_type === "roulette") {
     return (
       <>
         <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />
+        <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
         <PlayerChipsSidebar currentPlayerId={playerId} />
       </>
     );
@@ -49,6 +53,7 @@ export default function GameTableView({
   return (
     <>
       <BlackjackTableView table={table} playerId={playerId} onLeave={onLeave} />
+      <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
       <PlayerChipsSidebar currentPlayerId={playerId} />
     </>
   );

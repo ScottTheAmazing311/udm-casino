@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, LogOut, Coins, HelpCircle } from "lucide-react";
 import Image from "next/image";
@@ -9,7 +9,9 @@ import { PLAYERS } from "@/lib/constants";
 import { useCasinoFloor } from "@/hooks/useCasinoFloor";
 import { usePresence } from "@/hooks/usePresence";
 import { useCasinoStore } from "@/lib/store/casino-store";
+import { supabase } from "@/lib/supabase";
 import Leaderboard from "./Leaderboard";
+import ChatSidebar from "./ChatSidebar";
 
 interface IsometricFloorProps {
   playerId: number;
@@ -56,10 +58,66 @@ export default function IsometricFloor({
 
   const { casinoTables, casinoSeats, playerStats, sitDown } = useCasinoFloor();
   const { showLeaderboard, toggleLeaderboard, onlinePlayers } = useCasinoStore();
-  usePresence(playerId);
+  const { goOffline } = usePresence(playerId);
 
   const myChips = playerStats.find((p) => p.id === playerId)?.chips ?? 1000;
   const currentPlayer = PLAYERS.find((p) => p.id === playerId);
+
+  // AFK idle detection
+  const [showAfkPrompt, setShowAfkPrompt] = useState(false);
+  const [isAfk, setIsAfk] = useState(false);
+  const lastActivityRef = useRef(Date.now());
+  const afkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const afkCountdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetIdleTimer = useCallback(() => {
+    if (isAfk) return; // Don't reset if already AFK
+    lastActivityRef.current = Date.now();
+    setShowAfkPrompt(false);
+    if (afkTimerRef.current) clearTimeout(afkTimerRef.current);
+    if (afkCountdownRef.current) clearTimeout(afkCountdownRef.current);
+
+    afkTimerRef.current = setTimeout(() => {
+      setShowAfkPrompt(true);
+      // 30s countdown to go AFK
+      afkCountdownRef.current = setTimeout(() => {
+        setShowAfkPrompt(false);
+        setIsAfk(true);
+        goOffline();
+      }, 30000);
+    }, 90000);
+  }, [isAfk, goOffline]);
+
+  const handleAfkReturn = useCallback(() => {
+    setIsAfk(false);
+    setShowAfkPrompt(false);
+    if (afkCountdownRef.current) clearTimeout(afkCountdownRef.current);
+    // Re-mark online
+    supabase
+      .from("udm_players")
+      .update({ is_online: true, last_seen_at: new Date().toISOString() })
+      .eq("id", playerId)
+      .then();
+    // Restart idle timer
+    lastActivityRef.current = Date.now();
+    afkTimerRef.current = setTimeout(() => {
+      setShowAfkPrompt(true);
+      afkCountdownRef.current = setTimeout(() => {
+        setShowAfkPrompt(false);
+        setIsAfk(true);
+        goOffline();
+      }, 30000);
+    }, 90000);
+  }, [playerId, goOffline]);
+
+  // Start idle timer on mount
+  useEffect(() => {
+    resetIdleTimer();
+    return () => {
+      if (afkTimerRef.current) clearTimeout(afkTimerRef.current);
+      if (afkCountdownRef.current) clearTimeout(afkCountdownRef.current);
+    };
+  }, [resetIdleTimer]);
 
   // Calculate rendered image size to position avatars correctly
   useEffect(() => {
@@ -108,6 +166,7 @@ export default function IsometricFloor({
 
   function handleFloorTap(e: React.MouseEvent<HTMLDivElement>) {
     startMusic();
+    resetIdleTimer();
     // Get tap position relative to the image container
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
@@ -344,72 +403,83 @@ export default function IsometricFloor({
         </button>
       </div>
 
-      {/* Table Sit Prompt */}
+      {/* Table Sit Prompt — centered modal */}
       <AnimatePresence>
         {tablePrompt && (
           <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="absolute bottom-6 left-4 right-4 z-30"
-            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={(e) => { e.stopPropagation(); setTablePrompt(null); }}
           >
-            <div
-              className="rounded-2xl p-4 flex items-center gap-3"
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="rounded-2xl p-6 text-center max-w-xs w-full mx-4"
               style={{
                 background: "linear-gradient(135deg, #111118, #0d0d15)",
                 border: "1px solid #2a2a3a",
-                boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
               <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
                 style={{ background: "rgba(255,215,0,0.1)" }}
               >
-                <HelpCircle size={20} className="text-casino-gold" />
+                <HelpCircle size={28} className="text-casino-gold" />
               </div>
-              <div className="flex-1">
-                <div className="text-white text-sm font-semibold">
-                  {tablePrompt.label}
-                </div>
-                <div className="text-[#666] text-[10px]">
-                  {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette"
-                    ? `${seatedCount(tablePrompt.gameType)} players seated`
-                    : "Coming Soon"}
-                </div>
+              <div className="text-white text-lg font-bold mb-1">
+                {tablePrompt.label}
+              </div>
+              <div className="text-[#666] text-xs mb-5">
+                {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette"
+                  ? `${seatedCount(tablePrompt.gameType)} players seated`
+                  : "Coming Soon"}
               </div>
               {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" ? (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleSitDown}
-                  className="px-4 py-2 rounded-xl text-sm font-bold"
-                  style={{
-                    background: "linear-gradient(135deg, #FFD700, #FFA500)",
-                    color: "#000",
-                  }}
-                >
-                  Sit Down
-                </motion.button>
+                <div className="flex gap-2 justify-center">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleSitDown}
+                    className="px-6 py-2.5 rounded-xl text-sm font-bold"
+                    style={{
+                      background: "linear-gradient(135deg, #FFD700, #FFA500)",
+                      color: "#000",
+                    }}
+                  >
+                    Sit Down
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setTablePrompt(null)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-medium text-white/50"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
               ) : (
                 <div
-                  className="px-4 py-2 rounded-xl text-sm font-bold text-[#666]"
+                  className="inline-block px-6 py-2.5 rounded-xl text-sm font-bold text-[#666]"
                   style={{ background: "rgba(255,255,255,0.05)" }}
                 >
                   Coming Soon
                 </div>
               )}
-              <button
-                onClick={() => setTablePrompt(null)}
-                className="text-[#555] text-xs px-2"
-              >
-                &times;
-              </button>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Chat */}
+      <ChatSidebar playerId={playerId} playerName={playerName} chatContext="lobby" anchorLeft={imgSize.x} />
 
       {/* Leaderboard */}
       <AnimatePresence>
@@ -419,6 +489,94 @@ export default function IsometricFloor({
             currentPlayerId={playerId}
             onClose={toggleLeaderboard}
           />
+        )}
+      </AnimatePresence>
+
+      {/* AFK Prompt */}
+      <AnimatePresence>
+        {showAfkPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.7)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="rounded-2xl p-6 text-center max-w-xs mx-4"
+              style={{
+                background: "linear-gradient(135deg, #111118, #0d0d15)",
+                border: "1px solid #2a2a3a",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+            >
+              <div className="text-3xl mb-3">💤</div>
+              <div className="text-white text-lg font-bold mb-1">Are you still there?</div>
+              <div className="text-[#666] text-xs mb-4">
+                You&apos;ll be marked away in 30 seconds
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => { resetIdleTimer(); }}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold"
+                style={{
+                  background: "linear-gradient(135deg, #FFD700, #FFA500)",
+                  color: "#000",
+                }}
+              >
+                I&apos;m here!
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AFK Overlay — player went idle */}
+      <AnimatePresence>
+        {isAfk && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.85)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="rounded-2xl p-6 text-center max-w-xs mx-4"
+              style={{
+                background: "linear-gradient(135deg, #111118, #0d0d15)",
+                border: "1px solid #2a2a3a",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+            >
+              <div className="text-3xl mb-3">😴</div>
+              <div className="text-white text-lg font-bold mb-1">You went away</div>
+              <div className="text-[#666] text-xs mb-4">
+                You&apos;re no longer visible on the casino floor
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleAfkReturn}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold"
+                style={{
+                  background: "linear-gradient(135deg, #FFD700, #FFA500)",
+                  color: "#000",
+                }}
+              >
+                I&apos;m back!
+              </motion.button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
