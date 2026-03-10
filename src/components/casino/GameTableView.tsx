@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Users, Coins } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { PLAYERS } from "@/lib/constants";
 import { HEADSHOTS } from "@/lib/headshots";
@@ -57,6 +57,88 @@ function BlackjackTableView({
     onLeave();
   };
 
+  const status = session?.status || "waiting";
+  const state = session?.game_state as BlackjackGameState | undefined;
+  const isMyTurn = session?.current_turn_player_id === playerId;
+  const myHand = state?.playerHands?.[playerId];
+  const isMyTurnPlaying = isMyTurn && status === "playing" && myHand?.status === "playing";
+  const isBettingPhase = status === "betting" && !state?.bets?.[playerId];
+
+  // Auto-stand timer (15 seconds)
+  const TURN_TIMEOUT = 15;
+  const [turnTimer, setTurnTimer] = useState(TURN_TIMEOUT);
+  const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoStandFired = useRef(false);
+
+  const clearTurnTimer = useCallback(() => {
+    if (turnTimerRef.current) {
+      clearInterval(turnTimerRef.current);
+      turnTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    clearTurnTimer();
+    autoStandFired.current = false;
+
+    if (isMyTurnPlaying) {
+      setTurnTimer(TURN_TIMEOUT);
+      turnTimerRef.current = setInterval(() => {
+        setTurnTimer((prev) => {
+          if (prev <= 1) {
+            clearTurnTimer();
+            if (!autoStandFired.current) {
+              autoStandFired.current = true;
+              sendAction("stand");
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return clearTurnTimer;
+  }, [isMyTurnPlaying, sendAction, clearTurnTimer]);
+
+  // Betting timer (30 seconds) — skip hand if no bet placed
+  const BET_TIMEOUT = 30;
+  const [betTimer, setBetTimer] = useState(BET_TIMEOUT);
+  const betTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoBetSkipFired = useRef(false);
+
+  const clearBetTimer = useCallback(() => {
+    if (betTimerRef.current) {
+      clearInterval(betTimerRef.current);
+      betTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    clearBetTimer();
+    autoBetSkipFired.current = false;
+
+    if (isBettingPhase) {
+      setBetTimer(BET_TIMEOUT);
+      betTimerRef.current = setInterval(() => {
+        setBetTimer((prev) => {
+          if (prev <= 1) {
+            clearBetTimer();
+            if (!autoBetSkipFired.current) {
+              autoBetSkipFired.current = true;
+              leaveTable();
+              onLeave();
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return clearBetTimer;
+  }, [isBettingPhase, leaveTable, onLeave, clearBetTimer]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#060610] flex items-center justify-center">
@@ -64,10 +146,6 @@ function BlackjackTableView({
       </div>
     );
   }
-
-  const status = session?.status || "waiting";
-  const state = session?.game_state as BlackjackGameState | undefined;
-  const isMyTurn = session?.current_turn_player_id === playerId;
 
   // ─── WAITING / LOBBY ────────────────────
   if (!session || status === "waiting") {
@@ -205,7 +283,15 @@ function BlackjackTableView({
           >
             {!hasBet ? (
               <div className="text-center">
-                <div className="text-white/50 text-xs mb-3">Place your bet</div>
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <span className="text-white/50 text-xs">Place your bet</span>
+                  <span
+                    className="text-[11px] font-mono font-bold tabular-nums"
+                    style={{ color: betTimer <= 10 ? "#FF6B6B" : "#FFD700" }}
+                  >
+                    {betTimer}s
+                  </span>
+                </div>
                 <div className="flex gap-2 justify-center flex-wrap">
                   {[25, 50, 100, 250, 500]
                     .filter((amt) => amt >= table.min_bet && amt <= table.max_bet)
@@ -245,7 +331,6 @@ function BlackjackTableView({
   if ((status === "playing" || status === "resolving") && state) {
     const showDealerFull = status === "resolving";
     const dVal = state.dealerHand.length > 0 ? handValue(state.dealerHand) : 0;
-    const myHand = state.playerHands[playerId];
     const myCards = myHand?.cards || [];
     const myVal = handValue(myCards);
     const otherPlayers = state.turnOrder.filter((pid) => pid !== playerId);
@@ -337,15 +422,23 @@ function BlackjackTableView({
                 background: "linear-gradient(0deg, rgba(6,6,16,0.9) 50%, transparent)",
               }}
             >
-              {/* Turn indicator */}
+              {/* Turn indicator with timer */}
               {isMyTurn && myHand.status === "playing" && (
-                <motion.div
-                  animate={{ opacity: [0.5, 1, 0.5] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="text-center text-casino-gold text-[10px] uppercase tracking-[3px] font-bold mb-2"
-                >
-                  Your Turn
-                </motion.div>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <motion.div
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="text-casino-gold text-[10px] uppercase tracking-[3px] font-bold"
+                  >
+                    Your Turn
+                  </motion.div>
+                  <div
+                    className="text-[11px] font-mono font-bold tabular-nums"
+                    style={{ color: turnTimer <= 5 ? "#FF6B6B" : "#FFD700" }}
+                  >
+                    {turnTimer}s
+                  </div>
+                </div>
               )}
 
               {/* Cards + value */}
