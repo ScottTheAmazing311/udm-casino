@@ -14,6 +14,9 @@ export interface CardType {
 export interface HandState {
   cards: CardType[];
   status: "playing" | "bust" | "stand";
+  splitHand?: CardType[];
+  splitStatus?: "playing" | "bust" | "stand";
+  activeSplit?: boolean; // true = currently playing split hand
 }
 
 export interface BlackjackResult {

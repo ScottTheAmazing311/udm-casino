@@ -15,6 +15,7 @@ import PlayerAvatar from "@/components/ui/PlayerAvatar";
 import GameButton from "@/components/ui/GameButton";
 import ColbyTrainer from "@/components/games/ColbyTrainer";
 import RouletteTableView from "./RouletteTableView";
+import PlayerChipsSidebar from "./PlayerChipsSidebar";
 
 interface GameTableViewProps {
   table: CasinoTable;
@@ -37,10 +38,20 @@ export default function GameTableView({
 }: GameTableViewProps) {
   // Dispatch to roulette view
   if (table.game_type === "roulette") {
-    return <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />;
+    return (
+      <>
+        <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />
+        <PlayerChipsSidebar currentPlayerId={playerId} />
+      </>
+    );
   }
 
-  return <BlackjackTableView table={table} playerId={playerId} onLeave={onLeave} />;
+  return (
+    <>
+      <BlackjackTableView table={table} playerId={playerId} onLeave={onLeave} />
+      <PlayerChipsSidebar currentPlayerId={playerId} />
+    </>
+  );
 }
 
 function BlackjackTableView({
@@ -333,6 +344,14 @@ function BlackjackTableView({
     const dVal = state.dealerHand.length > 0 ? handValue(state.dealerHand) : 0;
     const myCards = myHand?.cards || [];
     const myVal = handValue(myCards);
+    const hasSplit = !!myHand?.splitHand;
+    const mySplitCards = myHand?.splitHand || [];
+    const mySplitVal = hasSplit ? handValue(mySplitCards) : 0;
+    const playingSplitHand = myHand?.activeSplit || false;
+    const canSplit = myCards.length === 2 && !hasSplit && myHand?.status === "playing" && (() => {
+      const rankVal = (r: string) => ["10", "J", "Q", "K"].includes(r) ? 10 : r;
+      return rankVal(myCards[0].rank) === rankVal(myCards[1].rank);
+    })();
     const otherPlayers = state.turnOrder.filter((pid) => pid !== playerId);
     const leftPlayers = otherPlayers.filter((_, i) => i % 2 === 0);
     const rightPlayers = otherPlayers.filter((_, i) => i % 2 === 1);
@@ -442,31 +461,66 @@ function BlackjackTableView({
               )}
 
               {/* Cards + value */}
-              <div className="flex items-end justify-center gap-2 mb-2">
-                <div className="flex gap-1.5">
-                  {myCards.map((c, i) => (
-                    <motion.div
-                      key={c.id}
-                      initial={{ y: 40, opacity: 0, rotate: -5 + i * 3 }}
-                      animate={{ y: 0, opacity: 1, rotate: -3 + i * 3 }}
-                      transition={{ delay: i * 0.1, type: "spring", stiffness: 200 }}
-                    >
-                      <Card card={c} delay={0} />
-                    </motion.div>
-                  ))}
+              <div className={`flex items-end justify-center gap-${hasSplit ? "4" : "2"} mb-2`}>
+                {/* Main hand */}
+                <div className={`flex flex-col items-center ${hasSplit && !playingSplitHand && myHand.status === "playing" ? "ring-2 ring-casino-gold rounded-xl p-1" : hasSplit ? "opacity-60 p-1" : ""}`}>
+                  {hasSplit && <div className="text-[8px] text-white/40 uppercase tracking-wider mb-1">Hand 1</div>}
+                  <div className="flex gap-1.5">
+                    {myCards.map((c, i) => (
+                      <motion.div
+                        key={c.id}
+                        initial={{ y: 40, opacity: 0, rotate: -5 + i * 3 }}
+                        animate={{ y: 0, opacity: 1, rotate: -3 + i * 3 }}
+                        transition={{ delay: i * 0.1, type: "spring", stiffness: 200 }}
+                      >
+                        <Card card={c} delay={0} small={hasSplit} />
+                      </motion.div>
+                    ))}
+                  </div>
+                  <motion.div
+                    key={myVal}
+                    initial={{ scale: 1.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className={`font-mono ${hasSplit ? "text-lg" : "text-2xl"} font-extrabold mt-1 drop-shadow-lg`}
+                    style={{
+                      color: myHand.status === "bust" ? "#FF6B6B" : myVal === 21 ? "#FFD700" : "#fff",
+                      textShadow: "0 2px 10px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {myHand.status === "bust" ? "BUST" : myVal}
+                  </motion.div>
                 </div>
-                <motion.div
-                  key={myVal}
-                  initial={{ scale: 1.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="font-mono text-2xl font-extrabold ml-2 mb-2 drop-shadow-lg"
-                  style={{
-                    color: myHand.status === "bust" ? "#FF6B6B" : myVal === 21 ? "#FFD700" : "#fff",
-                    textShadow: "0 2px 10px rgba(0,0,0,0.5)",
-                  }}
-                >
-                  {myVal}
-                </motion.div>
+
+                {/* Split hand */}
+                {hasSplit && (
+                  <div className={`flex flex-col items-center ${playingSplitHand && myHand.splitStatus === "playing" ? "ring-2 ring-casino-gold rounded-xl p-1" : "opacity-60 p-1"}`}>
+                    <div className="text-[8px] text-white/40 uppercase tracking-wider mb-1">Hand 2</div>
+                    <div className="flex gap-1.5">
+                      {mySplitCards.map((c, i) => (
+                        <motion.div
+                          key={c.id}
+                          initial={{ y: 40, opacity: 0, rotate: -5 + i * 3 }}
+                          animate={{ y: 0, opacity: 1, rotate: -3 + i * 3 }}
+                          transition={{ delay: i * 0.1, type: "spring", stiffness: 200 }}
+                        >
+                          <Card card={c} delay={0} small />
+                        </motion.div>
+                      ))}
+                    </div>
+                    <motion.div
+                      key={mySplitVal}
+                      initial={{ scale: 1.5, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="font-mono text-lg font-extrabold mt-1 drop-shadow-lg"
+                      style={{
+                        color: myHand.splitStatus === "bust" ? "#FF6B6B" : mySplitVal === 21 ? "#FFD700" : "#fff",
+                        textShadow: "0 2px 10px rgba(0,0,0,0.5)",
+                      }}
+                    >
+                      {myHand.splitStatus === "bust" ? "BUST" : mySplitVal}
+                    </motion.div>
+                  </div>
+                )}
               </div>
 
               {/* Bet display */}
@@ -515,8 +569,11 @@ function BlackjackTableView({
                   >
                     <ActionButton label="Hit" color="#34D399" onClick={() => sendAction("hit")} />
                     <ActionButton label="Stand" color="#60A5FA" onClick={() => sendAction("stand")} />
-                    {myCards.length === 2 && (
+                    {myCards.length === 2 && !hasSplit && (
                       <ActionButton label="Double" color="#F59E0B" onClick={() => sendAction("double")} />
+                    )}
+                    {canSplit && (
+                      <ActionButton label="Split" color="#A78BFA" onClick={() => sendAction("split")} />
                     )}
                   </motion.div>
                 )}

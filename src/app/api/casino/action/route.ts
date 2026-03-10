@@ -276,6 +276,61 @@ async function handleBlackjackAction(
     }
   }
 
+  // ── SPLIT ──────────────────────────────
+  else if (action === "split") {
+    if (status !== "playing") {
+      return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    }
+    if (currentTurnPlayerId !== playerId) {
+      return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+    }
+
+    const hand = state.playerHands[playerId];
+    if (!hand || hand.status !== "playing" || hand.cards.length !== 2) {
+      return NextResponse.json({ error: "Cannot split" }, { status: 400 });
+    }
+
+    // Check same rank (10, J, Q, K all count as 10)
+    const rankVal = (r: string) => ["10", "J", "Q", "K"].includes(r) ? 10 : r;
+    if (rankVal(hand.cards[0].rank) !== rankVal(hand.cards[1].rank)) {
+      return NextResponse.json({ error: "Cards must be the same rank to split" }, { status: 400 });
+    }
+
+    // Check chips for second bet
+    const { data: player } = await supabase
+      .from("udm_players")
+      .select("chips")
+      .eq("id", playerId)
+      .single();
+
+    const bet = state.bets[playerId];
+    if (!player || player.chips < bet * 2) {
+      return NextResponse.json({ error: "Insufficient chips to split" }, { status: 400 });
+    }
+
+    // Split: second card goes to split hand, deal one new card to each
+    hand.splitHand = [hand.cards.pop()!, state.deck.shift()!];
+    hand.cards.push(state.deck.shift()!);
+    hand.splitStatus = "playing";
+    hand.activeSplit = false; // play main hand first
+
+    // Double the bet (split bet matches original)
+    state.bets[playerId] = bet * 2;
+
+    // Check if main hand auto-stands at 21
+    if (handValue(hand.cards) === 21) {
+      hand.status = "stand";
+      // Move to split hand
+      hand.activeSplit = true;
+      if (handValue(hand.splitHand) === 21) {
+        hand.splitStatus = "stand";
+        hand.activeSplit = false;
+      }
+    }
+
+    state.playerHands[playerId] = hand;
+  }
+
   // ── HIT / STAND / DOUBLE ────────────────
   else if (action === "hit" || action === "stand" || action === "double") {
     if (status !== "playing") {
@@ -286,17 +341,32 @@ async function handleBlackjackAction(
     }
 
     const hand = state.playerHands[playerId];
-    if (!hand || hand.status !== "playing") {
+    if (!hand) {
+      return NextResponse.json({ error: "Invalid hand state" }, { status: 400 });
+    }
+
+    // Determine which hand is active (main or split)
+    const playingSplit = hand.activeSplit && hand.splitStatus === "playing";
+    const activeCards = playingSplit ? hand.splitHand! : hand.cards;
+    const activeStatus = playingSplit ? hand.splitStatus! : hand.status;
+
+    if (activeStatus !== "playing") {
       return NextResponse.json({ error: "Invalid hand state" }, { status: 400 });
     }
 
     if (action === "hit") {
-      hand.cards.push(state.deck.shift()!);
-      const val = handValue(hand.cards);
-      if (val > 21) hand.status = "bust";
-      else if (val === 21) hand.status = "stand";
+      activeCards.push(state.deck.shift()!);
+      const val = handValue(activeCards);
+      if (val > 21) {
+        if (playingSplit) hand.splitStatus = "bust";
+        else hand.status = "bust";
+      } else if (val === 21) {
+        if (playingSplit) hand.splitStatus = "stand";
+        else hand.status = "stand";
+      }
     } else if (action === "stand") {
-      hand.status = "stand";
+      if (playingSplit) hand.splitStatus = "stand";
+      else hand.status = "stand";
     } else if (action === "double") {
       const { data: player } = await supabase
         .from("udm_players")
@@ -305,20 +375,47 @@ async function handleBlackjackAction(
         .single();
 
       if (player) {
-        const extraBet = Math.min(state.bets[playerId], player.chips - state.bets[playerId]);
+        const halfBet = state.bets[playerId] / 2;
+        const extraBet = Math.min(halfBet, player.chips - state.bets[playerId]);
         state.bets[playerId] += extraBet;
       }
 
-      hand.cards.push(state.deck.shift()!);
-      const val = handValue(hand.cards);
-      hand.status = val > 21 ? "bust" : "stand";
+      activeCards.push(state.deck.shift()!);
+      const val = handValue(activeCards);
+      if (playingSplit) {
+        hand.splitStatus = val > 21 ? "bust" : "stand";
+      } else {
+        hand.status = val > 21 ? "bust" : "stand";
+      }
+    }
+
+    // If main hand done and split hand exists and not yet played, switch to split
+    if (!playingSplit && hand.status !== "playing" && hand.splitHand && hand.splitStatus === "playing") {
+      hand.activeSplit = true;
+    }
+    // If split hand done, mark activeSplit false
+    if (playingSplit && hand.splitStatus !== "playing") {
+      hand.activeSplit = false;
+    }
+
+    if (playingSplit) {
+      hand.splitHand = activeCards;
+    } else {
+      hand.cards = activeCards;
     }
 
     state.playerHands[playerId] = hand;
 
-    const allDone = state.turnOrder.every(
-      (pid) => state.playerHands[pid]?.status !== "playing"
-    );
+    // Check if player is fully done (both hands if split)
+    const isPlayerDone = (pid: number) => {
+      const h = state.playerHands[pid];
+      if (!h) return true;
+      if (h.status === "playing") return false;
+      if (h.splitHand && h.splitStatus === "playing") return false;
+      return true;
+    };
+
+    const allDone = state.turnOrder.every((pid) => isPlayerDone(pid));
 
     if (allDone) {
       while (handValue(state.dealerHand) < 17) {
@@ -330,20 +427,50 @@ async function handleBlackjackAction(
 
       for (const pid of state.turnOrder) {
         const h = state.playerHands[pid];
+        const totalBet = state.bets[pid] || 0;
+        let totalAmount = 0;
+        const resultParts: string[] = [];
+
+        // Resolve main hand
+        const halfBet = h.splitHand ? totalBet / 2 : totalBet;
         const pVal = handValue(h.cards);
-        const bet = state.bets[pid] || 0;
 
         if (h.status === "bust") {
-          results[pid] = { result: "BUST", amount: -bet };
+          totalAmount -= halfBet;
+          resultParts.push("BUST");
         } else if (dVal > 21 || pVal > dVal) {
-          const isBlackjack = pVal === 21 && h.cards.length === 2;
-          const win = isBlackjack ? Math.floor(bet * 1.5) : bet;
-          results[pid] = { result: isBlackjack ? "BLACKJACK!" : "WIN", amount: win };
+          const isBlackjack = pVal === 21 && h.cards.length === 2 && !h.splitHand;
+          const win = isBlackjack ? Math.floor(halfBet * 1.5) : halfBet;
+          totalAmount += win;
+          resultParts.push(isBlackjack ? "BLACKJACK!" : "WIN");
         } else if (pVal === dVal) {
-          results[pid] = { result: "PUSH", amount: 0 };
+          resultParts.push("PUSH");
         } else {
-          results[pid] = { result: "LOSE", amount: -bet };
+          totalAmount -= halfBet;
+          resultParts.push("LOSE");
         }
+
+        // Resolve split hand if exists
+        if (h.splitHand) {
+          const sVal = handValue(h.splitHand);
+          if (h.splitStatus === "bust") {
+            totalAmount -= halfBet;
+            resultParts.push("BUST");
+          } else if (dVal > 21 || sVal > dVal) {
+            totalAmount += halfBet;
+            resultParts.push("WIN");
+          } else if (sVal === dVal) {
+            resultParts.push("PUSH");
+          } else {
+            totalAmount -= halfBet;
+            resultParts.push("LOSE");
+          }
+        }
+
+        results[pid] = {
+          result: h.splitHand ? resultParts.join(" / ") : resultParts[0],
+          amount: totalAmount,
+        };
 
         await supabase.rpc("update_player_chips", {
           p_player_id: pid,
@@ -353,7 +480,7 @@ async function handleBlackjackAction(
         await supabase.from("udm_game_results").insert({
           session_id: session.id,
           player_id: pid,
-          bet_amount: bet,
+          bet_amount: totalBet,
           payout: results[pid].amount,
           hand_description: results[pid].result,
         });
@@ -363,11 +490,12 @@ async function handleBlackjackAction(
       status = "resolving";
       currentTurnPlayerId = null;
     } else {
+      // Advance to next player who isn't done
       let nextIdx = state.turnIndex;
       do {
         nextIdx = (nextIdx + 1) % state.turnOrder.length;
       } while (
-        state.playerHands[state.turnOrder[nextIdx]]?.status !== "playing" &&
+        isPlayerDone(state.turnOrder[nextIdx]) &&
         nextIdx !== state.turnIndex
       );
       state.turnIndex = nextIdx;
