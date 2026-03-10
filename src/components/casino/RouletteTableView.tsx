@@ -552,11 +552,10 @@ function TableBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/blackjack-table-bg.png"
+        src="/roulette.png"
         alt=""
         fill
         className="object-cover object-top"
-        style={{ imageRendering: "pixelated" }}
         priority
       />
       <div
