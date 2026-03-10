@@ -34,7 +34,7 @@ const TAP_ZONES = [
   // Roulette — centered around x:76% y:78%
   { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
   // Bar — top left area
-  { id: "bar", gameType: "bar", label: "The Bar", top: 17, left: 82, width: 16, height: 12 },
+  { id: "bar", gameType: "bar", label: "The Bar", top: 17, left: 81, width: 19, height: 14 },
   // Make Money — bottom right corner below roulette
   { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 85, left: 15, width: 40, height: 14 },
 ];
