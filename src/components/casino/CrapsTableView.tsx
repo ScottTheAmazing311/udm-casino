@@ -371,8 +371,11 @@ export default function CrapsTableView({
 
             {/* Chip selector */}
             {!isReady && (
-              <div className="mb-3">
-                <div className="text-white/30 text-[8px] uppercase tracking-wider text-center mb-1.5">Tap a bet, then tap the board</div>
+              <div
+                className="mb-3 rounded-2xl px-4 py-3"
+                style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}
+              >
+                <div className="text-white/50 text-[9px] uppercase tracking-wider text-center mb-2 font-bold">Select Chip Amount</div>
                 <div className="flex gap-2 justify-center">
                   {BET_AMOUNTS
                     .filter((amt) => amt >= table.min_bet && amt <= table.max_bet)
@@ -381,14 +384,14 @@ export default function CrapsTableView({
                         key={amt}
                         whileTap={{ scale: 0.92 }}
                         onClick={() => setSelectedChip(amt)}
-                        className="w-11 h-11 rounded-full font-mono text-[11px] font-bold flex items-center justify-center transition-all"
+                        className="w-12 h-12 rounded-full font-mono text-xs font-bold flex items-center justify-center transition-all"
                         style={{
                           background: selectedChip === amt
                             ? "linear-gradient(135deg, #FFD700, #B8860B)"
-                            : "rgba(255,255,255,0.08)",
-                          color: selectedChip === amt ? "#000" : "#888",
+                            : "rgba(255,255,255,0.1)",
+                          color: selectedChip === amt ? "#000" : "#aaa",
                           boxShadow: selectedChip === amt ? "0 4px 20px rgba(255,215,0,0.3)" : "none",
-                          border: selectedChip === amt ? "2px solid #FFD700" : "2px solid rgba(255,255,255,0.1)",
+                          border: selectedChip === amt ? "2px solid #FFD700" : "2px solid rgba(255,255,255,0.15)",
                         }}
                       >
                         ${amt}
