@@ -24,7 +24,7 @@ interface IsometricFloorProps {
 // Tap zones mapped to actual table positions in casino.png (percentages of image)
 const TAP_ZONES = [
   // Poker — centered around x:72% y:23%
-  { id: "poker", gameType: "poker", label: "Poker", top: 17, left: 55, width: 35, height: 12 },
+  { id: "poker", gameType: "poker", label: "Poker", top: 17, left: 55, width: 25, height: 12 },
   // Blackjack — around x:26-40% y:40%
   { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 33, left: 14, width: 38, height: 14 },
   // Slots — left side machines, y:49% down to y:79%
@@ -34,7 +34,7 @@ const TAP_ZONES = [
   // Roulette — centered around x:76% y:78%
   { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
   // Bar — top left area
-  { id: "bar", gameType: "bar", label: "The Bar", top: 30, left: 60, width: 30, height: 12 },
+  { id: "bar", gameType: "bar", label: "The Bar", top: 17, left: 82, width: 16, height: 12 },
   // Make Money — bottom right corner below roulette
   { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 85, left: 15, width: 40, height: 14 },
 ];
