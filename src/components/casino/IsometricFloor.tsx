@@ -562,22 +562,6 @@ export default function IsometricFloor({
             );
           })}
 
-        {/* Bar label */}
-        <div
-          className="absolute z-10 pointer-events-none flex flex-col items-center"
-          style={{
-            left: "39%",
-            top: "57%",
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          <div
-            className="px-2 py-0.5 rounded-full text-[7px] font-bold whitespace-nowrap"
-            style={{ background: "rgba(168,85,247,0.2)", color: "#C084FC" }}
-          >
-            <Wine size={8} className="inline -mt-px" /> The Bar  · $1
-          </div>
-        </div>
 
         {/* Make Money character */}
         <div
