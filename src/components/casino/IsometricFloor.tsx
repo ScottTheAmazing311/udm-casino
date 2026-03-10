@@ -360,10 +360,95 @@ export default function IsometricFloor({
     playMusic("/pixel-jackpot.mp3");
   }
 
+  // ─── Arrow key movement ────────────────
+  const keysPressed = useRef<Set<string>>(new Set());
+  const avatarPosRef = useRef(avatarPos);
+  avatarPosRef.current = avatarPos;
+  const animFrameRef = useRef<number>(0);
+  const [nearZone, setNearZone] = useState<typeof TAP_ZONES[number] | null>(null);
+
+  const MOVE_SPEED = 1.2; // percent per frame
+
+  const checkZoneOverlap = useCallback((x: number, y: number) => {
+    for (const zone of TAP_ZONES) {
+      if (
+        x >= zone.left &&
+        x <= zone.left + zone.width &&
+        y >= zone.top &&
+        y <= zone.top + zone.height
+      ) {
+        return zone;
+      }
+    }
+    return null;
+  }, []);
+
+  const interactWithZone = useCallback((zone: typeof TAP_ZONES[number]) => {
+    if (zone.gameType === "makemoney") {
+      handleMakeMoneyTap();
+    } else if (zone.gameType === "bar") {
+      handleBarTap();
+    } else {
+      setTablePrompt({ gameType: zone.gameType, label: zone.label });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const tick = () => {
+      const keys = keysPressed.current;
+      if (keys.size > 0) {
+        const pos = avatarPosRef.current;
+        let dx = 0, dy = 0;
+        if (keys.has("ArrowLeft") || keys.has("a")) dx -= MOVE_SPEED;
+        if (keys.has("ArrowRight") || keys.has("d")) dx += MOVE_SPEED;
+        if (keys.has("ArrowUp") || keys.has("w")) dy -= MOVE_SPEED;
+        if (keys.has("ArrowDown") || keys.has("s")) dy += MOVE_SPEED;
+        if (dx !== 0 || dy !== 0) {
+          const newX = clamp(pos.x + dx, BOUNDS.minX, BOUNDS.maxX);
+          const newY = clamp(pos.y + dy, BOUNDS.minY, BOUNDS.maxY);
+          setAvatarPos({ x: newX, y: newY });
+          const zone = checkZoneOverlap(newX, newY);
+          setNearZone(zone);
+          if (!zone) setTablePrompt(null);
+          resetIdleTimer();
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+    animFrameRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkZoneOverlap]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"].includes(e.key)) {
+        e.preventDefault();
+        keysPressed.current.add(e.key);
+        startMusic();
+      }
+      if ((e.key === "Enter" || e.key === " ") && nearZone) {
+        e.preventDefault();
+        interactWithZone(nearZone);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current.delete(e.key);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearZone, interactWithZone]);
+
+  // ─── Tap to move (mobile fallback) ─────
   function handleFloorTap(e: React.MouseEvent<HTMLDivElement>) {
     startMusic();
     resetIdleTimer();
-    // Get tap position relative to the image container
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
@@ -396,6 +481,7 @@ export default function IsometricFloor({
 
     // Walk to tap position
     setTablePrompt(null);
+    setNearZone(null);
     setAvatarPos({
       x: clamp(xPct, BOUNDS.minX, BOUNDS.maxX),
       y: clamp(yPct, BOUNDS.minY, BOUNDS.maxY),
@@ -457,7 +543,7 @@ export default function IsometricFloor({
         <motion.div
           className="absolute z-10 flex flex-col items-center pointer-events-none"
           animate={{ left: `${avatarPos.x}%`, top: `${avatarPos.y}%` }}
-          transition={{ type: "tween", duration: 0.6, ease: "easeInOut" }}
+          transition={{ type: "tween", duration: keysPressed.current.size > 0 ? 0.05 : 0.6, ease: "easeInOut" }}
           style={{ transform: "translate(-50%, -100%)" }}
         >
           <div
@@ -482,6 +568,17 @@ export default function IsometricFloor({
           >
             {playerName}
           </div>
+          {/* Zone interaction prompt */}
+          {nearZone && !tablePrompt && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-1 px-2.5 py-1 rounded-lg text-[8px] font-bold text-casino-gold whitespace-nowrap"
+              style={{ background: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,215,0,0.3)" }}
+            >
+              Press Enter · {nearZone.label}
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Other online players */}
