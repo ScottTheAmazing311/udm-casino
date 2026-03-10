@@ -79,6 +79,8 @@ export interface BlackjackGameState {
   results: Record<number, BlackjackResult> | null;
   turnOrder: number[];
   turnIndex: number;
+  turnStartedAt?: string;
+  bettingStartedAt?: string;
 }
 
 export interface RouletteGameState {

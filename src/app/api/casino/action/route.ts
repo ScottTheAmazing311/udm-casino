@@ -233,6 +233,143 @@ async function handleBlackjackAction(
   let currentTurnPlayerId = session.current_turn_player_id as number | null;
   const newVersion = (session.version as number) + 1;
 
+  const TURN_TIMEOUT_MS = 15000;
+  const BET_TIMEOUT_MS = 30000;
+
+  // ── CHECK TIMEOUT (any player can call) ──
+  if (action === "check-timeout") {
+    let changed = false;
+
+    // Check turn timeout during playing phase
+    if (status === "playing" && currentTurnPlayerId && state.turnStartedAt) {
+      const elapsed = Date.now() - new Date(state.turnStartedAt).getTime();
+      if (elapsed > TURN_TIMEOUT_MS) {
+        // Auto-stand the timed-out player
+        const hand = state.playerHands[currentTurnPlayerId];
+        if (hand) {
+          if (hand.activeSplit && hand.splitStatus === "playing") {
+            hand.splitStatus = "stand";
+            hand.activeSplit = false;
+          } else if (hand.status === "playing") {
+            hand.status = "stand";
+            // If they have a split hand waiting, move to it
+            if (hand.splitHand && hand.splitStatus === "playing") {
+              hand.activeSplit = true;
+              state.turnStartedAt = new Date().toISOString();
+            }
+          }
+          state.playerHands[currentTurnPlayerId] = hand;
+        }
+
+        const isPlayerDone = (pid: number) => {
+          const h = state.playerHands[pid];
+          if (!h) return true;
+          if (h.status === "playing") return false;
+          if (h.splitHand && h.splitStatus === "playing") return false;
+          return true;
+        };
+
+        if (isPlayerDone(currentTurnPlayerId)) {
+          // Advance turn or resolve
+          const allDone = state.turnOrder.every((pid) => isPlayerDone(pid));
+          if (allDone) {
+            while (handValue(state.dealerHand) < 17) {
+              state.dealerHand.push(state.deck.shift()!);
+            }
+            const dVal = handValue(state.dealerHand);
+            const results: Record<number, BlackjackResult> = {};
+            for (const pid of state.turnOrder) {
+              const h = state.playerHands[pid];
+              const totalBet = state.bets[pid] || 0;
+              let totalAmount = 0;
+              const resultParts: string[] = [];
+              const halfBet = h.splitHand ? totalBet / 2 : totalBet;
+              const pVal = handValue(h.cards);
+              if (h.status === "bust") { totalAmount -= halfBet; resultParts.push("BUST"); }
+              else if (dVal > 21 || pVal > dVal) {
+                const isBJ = pVal === 21 && h.cards.length === 2 && !h.splitHand;
+                totalAmount += isBJ ? Math.floor(halfBet * 1.5) : halfBet;
+                resultParts.push(isBJ ? "BLACKJACK!" : "WIN");
+              } else if (pVal === dVal) { resultParts.push("PUSH"); }
+              else { totalAmount -= halfBet; resultParts.push("LOSE"); }
+              if (h.splitHand) {
+                const sVal = handValue(h.splitHand);
+                if (h.splitStatus === "bust") { totalAmount -= halfBet; resultParts.push("BUST"); }
+                else if (dVal > 21 || sVal > dVal) { totalAmount += halfBet; resultParts.push("WIN"); }
+                else if (sVal === dVal) { resultParts.push("PUSH"); }
+                else { totalAmount -= halfBet; resultParts.push("LOSE"); }
+              }
+              results[pid] = { result: h.splitHand ? resultParts.join(" / ") : resultParts[0], amount: totalAmount };
+              await supabase.rpc("update_player_chips", { p_player_id: pid, p_amount: results[pid].amount });
+            }
+            state.results = results;
+            status = "resolving";
+            currentTurnPlayerId = null;
+          } else {
+            let nextIdx = state.turnIndex;
+            do { nextIdx = (nextIdx + 1) % state.turnOrder.length; }
+            while (isPlayerDone(state.turnOrder[nextIdx]) && nextIdx !== state.turnIndex);
+            state.turnIndex = nextIdx;
+            currentTurnPlayerId = state.turnOrder[nextIdx];
+            state.turnStartedAt = new Date().toISOString();
+          }
+        }
+        changed = true;
+      }
+    }
+
+    // Check bet timeout — remove players who haven't bet
+    if (status === "betting" && state.bettingStartedAt) {
+      const elapsed = Date.now() - new Date(state.bettingStartedAt).getTime();
+      if (elapsed > BET_TIMEOUT_MS) {
+        const playersWithoutBets = state.turnOrder.filter((pid) => !state.bets[pid]);
+        if (playersWithoutBets.length > 0 && playersWithoutBets.length < state.turnOrder.length) {
+          // Remove non-bettors from the round
+          state.turnOrder = state.turnOrder.filter((pid) => state.bets[pid]);
+          // Remove their seats
+          for (const pid of playersWithoutBets) {
+            await supabase.from("udm_casino_seats").delete().eq("table_id", tableId).eq("player_id", pid);
+          }
+          // If all remaining have bet, deal
+          const allBet = state.turnOrder.every((pid) => state.bets[pid]);
+          if (allBet && state.turnOrder.length > 0) {
+            const deck = createDeck(4);
+            let idx = 0;
+            const playerHands: Record<number, HandState> = {};
+            state.turnOrder.forEach((pid) => {
+              playerHands[pid] = { cards: [deck[idx++], deck[idx++]], status: "playing" };
+            });
+            state.dealerHand = [deck[idx++], deck[idx++]];
+            state.deck = deck.slice(idx);
+            state.playerHands = playerHands;
+            state.turnIndex = 0;
+            status = "playing";
+            currentTurnPlayerId = state.turnOrder[0];
+            state.turnStartedAt = new Date().toISOString();
+          }
+          changed = true;
+        } else if (playersWithoutBets.length === state.turnOrder.length) {
+          // Nobody bet — complete session
+          await supabase.from("udm_game_sessions")
+            .update({ status: "complete", completed_at: new Date().toISOString() })
+            .eq("id", session.id);
+          return NextResponse.json({ success: true, status: "complete" });
+        }
+      }
+    }
+
+    if (!changed) {
+      return NextResponse.json({ success: true, noChange: true });
+    }
+
+    // Save and return
+    const { error: updateErr } = await supabase.from("udm_game_sessions").update({
+      status, game_state: state, current_turn_player_id: currentTurnPlayerId, version: newVersion,
+    }).eq("id", session.id);
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return NextResponse.json({ success: true, status, state, version: newVersion });
+  }
+
   // ── BET ─────────────────────────────────
   if (action === "bet") {
     if (status !== "betting") {
@@ -273,6 +410,7 @@ async function handleBlackjackAction(
       state.turnIndex = 0;
       status = "playing";
       currentTurnPlayerId = state.turnOrder[0];
+      state.turnStartedAt = new Date().toISOString();
     }
   }
 
@@ -500,6 +638,7 @@ async function handleBlackjackAction(
       );
       state.turnIndex = nextIdx;
       currentTurnPlayerId = state.turnOrder[nextIdx];
+      state.turnStartedAt = new Date().toISOString();
     }
   }
 
@@ -530,6 +669,7 @@ async function handleBlackjackAction(
       results: null,
       turnOrder,
       turnIndex: 0,
+      bettingStartedAt: new Date().toISOString(),
     };
 
     const { data: newSession, error: newErr } = await supabase

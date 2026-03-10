@@ -64,6 +64,7 @@ export async function POST(request: Request) {
         results: null,
         turnOrder,
         turnIndex: 0,
+        bettingStartedAt: new Date().toISOString(),
       };
 
   const { data: session, error } = await supabase

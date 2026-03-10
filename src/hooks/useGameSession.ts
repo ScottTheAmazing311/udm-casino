@@ -93,11 +93,21 @@ export function useGameSession(tableId: string, playerId: number) {
       )
       .subscribe();
 
+    // Poll for timeout checks every 5 seconds
+    const timeoutPoller = setInterval(() => {
+      fetch("/api/casino/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId, playerId, action: "check-timeout" }),
+      }).catch(() => {});
+    }, 5000);
+
     return () => {
       supabase.removeChannel(sessionChannel);
       supabase.removeChannel(seatChannel);
+      clearInterval(timeoutPoller);
     };
-  }, [tableId, refresh]);
+  }, [tableId, playerId, refresh]);
 
   const sendAction = useCallback(
     async (action: string, payload?: Record<string, unknown>) => {
