@@ -49,6 +49,7 @@ export default function CrapsTableView({
   const { session, seats, loading, error, sendAction, startGame, leaveTable } =
     useGameSession(table.id, playerId);
   const [selectedBetType, setSelectedBetType] = useState<CrapsBetType>("pass");
+  const [selectedChip, setSelectedChip] = useState(25);
 
   const handleLeave = async () => {
     await leaveTable();
@@ -159,41 +160,80 @@ export default function CrapsTableView({
     const otherPlayers = state.turnOrder.filter((pid) => pid !== playerId);
     const shooterName = getPlayerName(state.turnOrder[state.shooterIndex]);
 
-    return (
-      <div className="min-h-screen bg-[#060610] relative overflow-hidden">
-        <TableBg />
-        <div className="relative z-10 flex flex-col min-h-screen">
-          <TopBar table={table} onLeave={handleLeave} />
+    // Aggregate bets per cell for all players
+    const cellBets: Record<string, { playerId: number; amount: number }[]> = {};
+    if (state.bets) {
+      for (const [pid, bets] of Object.entries(state.bets)) {
+        for (const bet of bets) {
+          const key = bet.type;
+          if (!cellBets[key]) cellBets[key] = [];
+          const existing = cellBets[key].find((b) => b.playerId === Number(pid));
+          if (existing) existing.amount += bet.amount;
+          else cellBets[key].push({ playerId: Number(pid), amount: bet.amount });
+        }
+      }
+    }
 
-          <div className="flex-1 flex flex-col px-4 py-2">
-            {/* Shooter indicator */}
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <Dice5 size={14} className="text-casino-gold" />
-              <span className="text-white/60 text-xs">
-                Shooter: <span className="text-casino-gold font-bold">{isShooter ? "You" : shooterName}</span>
-              </span>
+    const placeBet = (betType: CrapsBetType) => {
+      if (isReady) return;
+      setSelectedBetType(betType);
+      sendAction("place-bet", { betType, amount: selectedChip });
+    };
+
+    const renderChipsOnCell = (betType: string) => {
+      const bets = cellBets[betType];
+      if (!bets || bets.length === 0) return null;
+      return (
+        <div className="absolute bottom-0.5 right-0.5 flex gap-0.5">
+          {bets.map((b) => (
+            <div
+              key={b.playerId}
+              className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-bold border border-black/30"
+              style={{
+                background: b.playerId === playerId
+                  ? "linear-gradient(135deg, #FFD700, #B8860B)"
+                  : `linear-gradient(135deg, ${getPlayerColor(b.playerId)}, ${getPlayerColor(b.playerId)}88)`,
+                color: b.playerId === playerId ? "#000" : "#fff",
+              }}
+            >
+              {b.amount}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-[#060610] relative overflow-hidden flex flex-col">
+        <TableBg />
+        <TopBar table={table} onLeave={handleLeave} />
+
+        <div className="relative z-10 flex-1 overflow-auto px-2 py-2">
+          <div className="max-w-[380px] mx-auto">
+            {/* Shooter & point indicator */}
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="flex items-center gap-1.5">
+                <Dice5 size={12} className="text-casino-gold" />
+                <span className="text-white/60 text-[10px]">
+                  Shooter: <span className="text-casino-gold font-bold">{isShooter ? "You" : shooterName}</span>
+                </span>
+              </div>
+              {state.point && (
+                <div className="px-2.5 py-0.5 rounded-full bg-casino-gold/20">
+                  <span className="text-casino-gold text-[10px] font-mono font-bold">Point: {state.point}</span>
+                </div>
+              )}
             </div>
 
-            {/* Point indicator */}
-            {state.point && (
-              <div className="flex items-center justify-center mb-3">
-                <div className="px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm">
-                  <span className="text-white/60 text-xs">Point: </span>
-                  <span className="text-casino-gold font-mono font-bold text-lg">{state.point}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Other players' status */}
+            {/* Other players status */}
             {otherPlayers.length > 0 && (
-              <div className="flex justify-center gap-4 mb-4">
+              <div className="flex justify-center gap-3 mb-3">
                 {otherPlayers.map((pid) => {
                   const hasBets = (state.bets[pid] || []).length > 0;
                   const ready = state.readyPlayers.includes(pid);
                   return (
-                    <div key={pid} className="flex flex-col items-center gap-1">
-                      <PlayerAvatar playerId={pid} size={28} color={getPlayerColor(pid)} />
-                      <span className="text-[8px] text-white/60">{getPlayerName(pid)}</span>
+                    <div key={pid} className="flex flex-col items-center gap-0.5">
+                      <PlayerAvatar playerId={pid} size={24} color={getPlayerColor(pid)} />
                       <span className={`text-[7px] font-bold ${ready ? "text-casino-green" : hasBets ? "text-casino-gold" : "text-white/30"}`}>
                         {ready ? "Ready" : hasBets ? "Betting" : "..."}
                       </span>
@@ -203,48 +243,152 @@ export default function CrapsTableView({
               </div>
             )}
 
-            {/* Bet type selector */}
-            <div className="mb-3">
-              <div className="text-white/40 text-[9px] uppercase tracking-wider mb-2 text-center">Select Bet</div>
-              <div className="flex gap-1.5 justify-center flex-wrap">
-                {BET_OPTIONS.map((opt) => (
-                  <motion.button
-                    key={opt.type}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedBetType(opt.type)}
-                    className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wide"
-                    style={{
-                      background: selectedBetType === opt.type ? `${opt.color}30` : "rgba(255,255,255,0.05)",
-                      border: `1px solid ${selectedBetType === opt.type ? opt.color : "rgba(255,255,255,0.1)"}`,
-                      color: selectedBetType === opt.type ? opt.color : "rgba(255,255,255,0.5)",
-                    }}
-                  >
-                    {opt.label}
-                  </motion.button>
-                ))}
+            {/* ─── CRAPS BOARD ─────────────────── */}
+            <div className="rounded-2xl overflow-hidden border border-white/10 mb-3"
+              style={{ background: "rgba(0,80,0,0.6)", backdropFilter: "blur(8px)" }}
+            >
+              {/* Top row: Don't Pass / Don't Come */}
+              <div className="grid grid-cols-2 gap-px bg-white/10">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => placeBet("dontpass")}
+                  className="relative p-3 text-center"
+                  style={{
+                    background: selectedBetType === "dontpass" ? "rgba(239,68,68,0.3)" : "rgba(239,68,68,0.1)",
+                    border: selectedBetType === "dontpass" ? "2px solid #EF4444" : "2px solid transparent",
+                  }}
+                >
+                  <div className="text-[11px] font-bold text-red-400 uppercase tracking-wide">Don&apos;t Pass</div>
+                  <div className="text-[8px] text-red-300/60 mt-0.5">Bar 12 · Opposite of Pass</div>
+                  {renderChipsOnCell("dontpass")}
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => placeBet("dontcome")}
+                  className="relative p-3 text-center"
+                  style={{
+                    background: selectedBetType === "dontcome" ? "rgba(239,68,68,0.3)" : "rgba(239,68,68,0.1)",
+                    border: selectedBetType === "dontcome" ? "2px solid #EF4444" : "2px solid transparent",
+                  }}
+                >
+                  <div className="text-[11px] font-bold text-red-400 uppercase tracking-wide">Don&apos;t Come</div>
+                  <div className="text-[8px] text-red-300/60 mt-0.5">Opposite of Come</div>
+                  {renderChipsOnCell("dontcome")}
+                </motion.button>
               </div>
-              <div className="text-white/30 text-[8px] text-center mt-1">
-                {BET_OPTIONS.find((o) => o.type === selectedBetType)?.desc}
+
+              {/* Main row: Pass Line */}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => placeBet("pass")}
+                className="relative w-full p-4 text-center border-t border-b border-white/10"
+                style={{
+                  background: selectedBetType === "pass" ? "rgba(74,222,128,0.25)" : "rgba(74,222,128,0.08)",
+                  border: selectedBetType === "pass" ? "2px solid #4ADE80" : "2px solid transparent",
+                }}
+              >
+                <div className="text-lg font-bold text-green-400 uppercase tracking-widest">Pass Line</div>
+                <div className="text-[9px] text-green-300/60 mt-0.5">Win on 7 or 11 · Lose on 2, 3, or 12</div>
+                {renderChipsOnCell("pass")}
+              </motion.button>
+
+              {/* Come bet */}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => placeBet("come")}
+                className="relative w-full p-3 text-center border-b border-white/10"
+                style={{
+                  background: selectedBetType === "come" ? "rgba(74,222,128,0.25)" : "rgba(74,222,128,0.08)",
+                  border: selectedBetType === "come" ? "2px solid #4ADE80" : "2px solid transparent",
+                }}
+              >
+                <div className="text-sm font-bold text-green-400 uppercase tracking-wider">Come</div>
+                <div className="text-[8px] text-green-300/60 mt-0.5">Like Pass but mid-round</div>
+                {renderChipsOnCell("come")}
+              </motion.button>
+
+              {/* Field bet - full width */}
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => placeBet("field")}
+                className="relative w-full p-3 text-center border-b border-white/10"
+                style={{
+                  background: selectedBetType === "field" ? "rgba(245,158,11,0.3)" : "rgba(245,158,11,0.08)",
+                  border: selectedBetType === "field" ? "2px solid #F59E0B" : "2px solid transparent",
+                }}
+              >
+                <div className="text-sm font-bold text-amber-400 uppercase tracking-wider">Field</div>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  {[2, 3, 4, 9, 10, 11, 12].map((n) => (
+                    <span
+                      key={n}
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-mono font-bold"
+                      style={{
+                        background: n === 2 || n === 12 ? "rgba(255,215,0,0.3)" : "rgba(255,255,255,0.1)",
+                        color: n === 2 || n === 12 ? "#FFD700" : "#F59E0B",
+                      }}
+                    >
+                      {n}
+                    </span>
+                  ))}
+                </div>
+                <div className="text-[8px] text-amber-300/60 mt-1">2 &amp; 12 pay 2x · Others pay 1x</div>
+                {renderChipsOnCell("field")}
+              </motion.button>
+
+              {/* Place bets row */}
+              <div className="grid grid-cols-2 gap-px bg-white/10">
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => placeBet("place6")}
+                  className="relative p-3 text-center"
+                  style={{
+                    background: selectedBetType === "place6" ? "rgba(96,165,250,0.3)" : "rgba(96,165,250,0.08)",
+                    border: selectedBetType === "place6" ? "2px solid #60A5FA" : "2px solid transparent",
+                  }}
+                >
+                  <div className="text-2xl font-mono font-bold text-blue-400">6</div>
+                  <div className="text-[9px] font-bold text-blue-400 uppercase tracking-wide">Place 6</div>
+                  <div className="text-[7px] text-blue-300/60">Pays 7:6</div>
+                  {renderChipsOnCell("place6")}
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => placeBet("place8")}
+                  className="relative p-3 text-center"
+                  style={{
+                    background: selectedBetType === "place8" ? "rgba(167,139,250,0.3)" : "rgba(167,139,250,0.08)",
+                    border: selectedBetType === "place8" ? "2px solid #A78BFA" : "2px solid transparent",
+                  }}
+                >
+                  <div className="text-2xl font-mono font-bold text-purple-400">8</div>
+                  <div className="text-[9px] font-bold text-purple-400 uppercase tracking-wide">Place 8</div>
+                  <div className="text-[7px] text-purple-300/60">Pays 7:6</div>
+                  {renderChipsOnCell("place8")}
+                </motion.button>
               </div>
             </div>
 
-            {/* Bet amount chips */}
+            {/* Chip selector */}
             {!isReady && (
               <div className="mb-3">
+                <div className="text-white/30 text-[8px] uppercase tracking-wider text-center mb-1.5">Tap a bet, then tap the board</div>
                 <div className="flex gap-2 justify-center">
                   {BET_AMOUNTS
                     .filter((amt) => amt >= table.min_bet && amt <= table.max_bet)
                     .map((amt) => (
                       <motion.button
                         key={amt}
-                        whileHover={{ scale: 1.08 }}
                         whileTap={{ scale: 0.92 }}
-                        onClick={() => sendAction("place-bet", { betType: selectedBetType, amount: amt })}
-                        className="w-12 h-12 rounded-full font-mono text-xs font-bold flex items-center justify-center"
+                        onClick={() => setSelectedChip(amt)}
+                        className="w-11 h-11 rounded-full font-mono text-[11px] font-bold flex items-center justify-center transition-all"
                         style={{
-                          background: "linear-gradient(135deg, #FFD700, #B8860B)",
-                          color: "#000",
-                          boxShadow: "0 4px 20px rgba(255,215,0,0.25)",
+                          background: selectedChip === amt
+                            ? "linear-gradient(135deg, #FFD700, #B8860B)"
+                            : "rgba(255,255,255,0.08)",
+                          color: selectedChip === amt ? "#000" : "#888",
+                          boxShadow: selectedChip === amt ? "0 4px 20px rgba(255,215,0,0.3)" : "none",
+                          border: selectedChip === amt ? "2px solid #FFD700" : "2px solid rgba(255,255,255,0.1)",
                         }}
                       >
                         ${amt}
@@ -284,7 +428,7 @@ export default function CrapsTableView({
             )}
 
             {/* Action buttons */}
-            <div className="flex gap-2 justify-center mt-auto pb-6">
+            <div className="flex gap-2 justify-center pb-6">
               {myBets.length > 0 && !isReady && (
                 <>
                   <GameButton onClick={() => sendAction("ready")} color="#4ADE80" primary>
@@ -300,9 +444,9 @@ export default function CrapsTableView({
               )}
             </div>
           </div>
-
-          {error && <div className="px-4 pb-4 text-casino-red text-xs text-center">{error}</div>}
         </div>
+
+        {error && <div className="px-4 pb-4 text-casino-red text-xs text-center">{error}</div>}
       </div>
     );
   }
