@@ -224,18 +224,41 @@ export default function IsometricFloor({
         {/* Other online players */}
         {onlinePlayers
           .filter((pid) => pid !== playerId)
-          .slice(0, 5)
           .map((pid, i) => {
             const p = PLAYERS.find((pl) => pl.id === pid);
             if (!p) return null;
-            const positions = [
-              { x: 25, y: 45 },
-              { x: 70, y: 35 },
-              { x: 35, y: 65 },
-              { x: 65, y: 55 },
-              { x: 50, y: 50 },
+
+            // Check if player is seated at a table
+            const seat = casinoSeats.find((s) => s.player_id === pid);
+            const seatedTable = seat
+              ? casinoTables.find((t) => t.id === seat.table_id)
+              : null;
+            const seatedZone = seatedTable
+              ? TAP_ZONES.find((z) => z.gameType === seatedTable.game_type)
+              : null;
+
+            // Position near table if seated, otherwise spread around the floor
+            const idlePositions = [
+              { x: 25, y: 85 },
+              { x: 70, y: 85 },
+              { x: 45, y: 88 },
+              { x: 60, y: 82 },
+              { x: 35, y: 80 },
+              { x: 80, y: 88 },
+              { x: 15, y: 82 },
+              { x: 50, y: 85 },
             ];
-            const pos = positions[i];
+            const pos = seatedZone
+              ? {
+                  x: clamp(seatedZone.left + seatedZone.width / 2 + (i % 2 === 0 ? -6 : 6), BOUNDS.minX, BOUNDS.maxX),
+                  y: clamp(seatedZone.top + seatedZone.height + 6, BOUNDS.minY, BOUNDS.maxY),
+                }
+              : idlePositions[i % idlePositions.length];
+
+            const gameLabel = seatedTable
+              ? seatedTable.game_type.charAt(0).toUpperCase() + seatedTable.game_type.slice(1)
+              : null;
+
             return (
               <div
                 key={pid}
@@ -248,7 +271,7 @@ export default function IsometricFloor({
               >
                 <div
                   className="w-8 h-8 rounded-full overflow-hidden border-2 shadow-md shadow-black/40"
-                  style={{ borderColor: p.color }}
+                  style={{ borderColor: seatedTable ? "#34D399" : p.color }}
                 >
                   <Image
                     src={HEADSHOTS[pid] || ""}
@@ -264,6 +287,14 @@ export default function IsometricFloor({
                 >
                   {p.name}
                 </div>
+                {gameLabel && (
+                  <div
+                    className="mt-0.5 px-1.5 py-px rounded-full text-[6px] font-bold whitespace-nowrap"
+                    style={{ background: "rgba(52,211,153,0.2)", color: "#34D399" }}
+                  >
+                    Playing {gameLabel}
+                  </div>
+                )}
               </div>
             );
           })}

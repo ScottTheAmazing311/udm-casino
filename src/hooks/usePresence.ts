@@ -17,15 +17,24 @@ export function usePresence(playerId: number | null) {
       .eq("id", playerId)
       .then();
 
-    // Poll online players
+    // Poll online players — only count those seen in the last 30s
     const fetchOnline = async () => {
+      const staleThreshold = new Date(Date.now() - 30000).toISOString();
       const { data } = await supabase
         .from("udm_players")
         .select("id")
-        .eq("is_online", true);
+        .eq("is_online", true)
+        .gte("last_seen_at", staleThreshold);
       if (data) {
         setOnlinePlayers(data.map((p) => p.id));
       }
+
+      // Mark stale players as offline and remove their seats
+      await supabase
+        .from("udm_players")
+        .update({ is_online: false })
+        .eq("is_online", true)
+        .lt("last_seen_at", staleThreshold);
     };
 
     fetchOnline();
@@ -40,10 +49,20 @@ export function usePresence(playerId: number | null) {
         .then();
     }, 15000);
 
+    // Go offline on tab close
+    const handleUnload = () => {
+      navigator.sendBeacon?.(
+        "/api/auth/offline",
+        JSON.stringify({ playerId })
+      );
+    };
+    window.addEventListener("beforeunload", handleUnload);
+
     // Go offline on unmount
     return () => {
       clearInterval(interval);
       clearInterval(heartbeat);
+      window.removeEventListener("beforeunload", handleUnload);
       supabase
         .from("udm_players")
         .update({ is_online: false })
