@@ -48,15 +48,23 @@ export async function POST(request: Request) {
   // Create new game session in betting phase
   const turnOrder = seats.map((s) => s.player_id);
 
-  const gameState = {
-    deck: [],
-    dealerHand: [],
-    playerHands: {},
-    bets: {},
-    results: null,
-    turnOrder,
-    turnIndex: 0,
-  };
+  const gameState = table.game_type === "roulette"
+    ? {
+        bets: {},
+        readyPlayers: [],
+        winningNumber: null,
+        results: null,
+        turnOrder,
+      }
+    : {
+        deck: [],
+        dealerHand: [],
+        playerHands: {},
+        bets: {},
+        results: null,
+        turnOrder,
+        turnIndex: 0,
+      };
 
   const { data: session, error } = await supabase
     .from("udm_game_sessions")

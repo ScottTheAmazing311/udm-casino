@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Swords, Spade, Dice5 } from "lucide-react";
+import { Swords, Spade, Dice5, CircleDot } from "lucide-react";
 import Image from "next/image";
 import { CasinoTable, CasinoSeat } from "@/lib/store/casino-store";
 import { PLAYERS } from "@/lib/constants";
@@ -16,16 +16,18 @@ interface TableSpotProps {
   delay?: number;
 }
 
-const GAME_ICONS = {
+const GAME_ICONS: Record<string, typeof Swords> = {
   blackjack: Swords,
   poker: Spade,
   craps: Dice5,
+  roulette: CircleDot,
 };
 
-const GAME_COLORS = {
+const GAME_COLORS: Record<string, string> = {
   blackjack: "#FF6B6B",
   poker: "#60A5FA",
   craps: "#F59E0B",
+  roulette: "#34D399",
 };
 
 export default function TableSpot({

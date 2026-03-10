@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export interface CasinoTable {
   id: string;
-  game_type: "blackjack" | "poker" | "craps";
+  game_type: "blackjack" | "poker" | "craps" | "roulette";
   table_name: string;
   floor_x: number;
   floor_y: number;

@@ -29,7 +29,7 @@ const TAP_ZONES = [
   // Craps — centered around x:74% y:61%
   { id: "craps", gameType: "craps", label: "Craps", top: 54, left: 54, width: 42, height: 14 },
   // Roulette — centered around x:76% y:78%
-  { id: "roulette", gameType: "craps", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
+  { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
 ];
 
 const BOUNDS = { minX: 5, maxX: 95, minY: 16, maxY: 92 };
@@ -374,12 +374,12 @@ export default function IsometricFloor({
                   {tablePrompt.label}
                 </div>
                 <div className="text-[#666] text-[10px]">
-                  {tablePrompt.gameType === "blackjack"
+                  {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette"
                     ? `${seatedCount(tablePrompt.gameType)} players seated`
                     : "Coming Soon"}
                 </div>
               </div>
-              {tablePrompt.gameType === "blackjack" ? (
+              {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" ? (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}

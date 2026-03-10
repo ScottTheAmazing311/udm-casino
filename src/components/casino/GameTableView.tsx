@@ -14,6 +14,7 @@ import Card from "@/components/ui/Card";
 import PlayerAvatar from "@/components/ui/PlayerAvatar";
 import GameButton from "@/components/ui/GameButton";
 import ColbyTrainer from "@/components/games/ColbyTrainer";
+import RouletteTableView from "./RouletteTableView";
 
 interface GameTableViewProps {
   table: CasinoTable;
@@ -34,9 +35,27 @@ export default function GameTableView({
   playerId,
   onLeave,
 }: GameTableViewProps) {
-  const { session, seats, loading, error, sendAction, startGame } =
+  // Dispatch to roulette view
+  if (table.game_type === "roulette") {
+    return <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />;
+  }
+
+  return <BlackjackTableView table={table} playerId={playerId} onLeave={onLeave} />;
+}
+
+function BlackjackTableView({
+  table,
+  playerId,
+  onLeave,
+}: GameTableViewProps) {
+  const { session, seats, loading, error, sendAction, startGame, leaveTable } =
     useGameSession(table.id, playerId);
   const [showTrainer, setShowTrainer] = useState(false);
+
+  const handleLeave = async () => {
+    await leaveTable();
+    onLeave();
+  };
 
   if (loading) {
     return (
@@ -60,7 +79,7 @@ export default function GameTableView({
           {/* Header */}
           <div className="flex items-center gap-3 mb-8">
             <button
-              onClick={onLeave}
+              onClick={handleLeave}
               className="w-9 h-9 rounded-xl flex items-center justify-center bg-black/40 border border-white/10 backdrop-blur-sm"
             >
               <ArrowLeft size={16} className="text-white/60" />
@@ -152,7 +171,7 @@ export default function GameTableView({
         <TableBackground gameType={table.game_type} />
         <div className="relative z-10 flex flex-col min-h-screen">
           {/* Top bar */}
-          <TopBar table={table} onLeave={onLeave} />
+          <TopBar table={table} onLeave={handleLeave} />
 
           {/* Table area with other players */}
           <div className="flex-1 flex flex-col items-center justify-center px-4">
@@ -239,7 +258,7 @@ export default function GameTableView({
         <TableBackground gameType={table.game_type} />
 
         {/* Top bar */}
-        <TopBar table={table} onLeave={onLeave} />
+        <TopBar table={table} onLeave={handleLeave} />
 
         {/* Main table area */}
         <div className="relative z-10 flex-1 flex flex-col">
@@ -420,7 +439,7 @@ export default function GameTableView({
                   <GameButton onClick={() => sendAction("new-round")} color="#FFD700" primary>
                     New Round
                   </GameButton>
-                  <GameButton onClick={onLeave} color="#333">
+                  <GameButton onClick={handleLeave} color="#333">
                     Leave
                   </GameButton>
                 </motion.div>
@@ -453,6 +472,7 @@ const GAME_BACKGROUNDS: Record<string, string> = {
   blackjack: "/blackjack-table-bg.png",
   poker: "/poker-table-bg.png",
   craps: "/craps-table-bg.png",
+  roulette: "/craps-table-bg.png",
   slots: "/slots-bg.png",
 };
 

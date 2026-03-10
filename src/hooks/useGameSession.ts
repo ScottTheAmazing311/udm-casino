@@ -136,6 +136,18 @@ export function useGameSession(tableId: string, playerId: number) {
     }
   }, [tableId, playerId]);
 
+  const leaveTable = useCallback(async () => {
+    try {
+      await fetch("/api/casino/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId, playerId }),
+      });
+    } catch {
+      // best-effort
+    }
+  }, [tableId, playerId]);
+
   return {
     session,
     seats,
@@ -143,6 +155,7 @@ export function useGameSession(tableId: string, playerId: number) {
     error,
     sendAction,
     startGame,
+    leaveTable,
     refresh,
   };
 }

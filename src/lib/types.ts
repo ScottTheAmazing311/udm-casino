@@ -44,7 +44,7 @@ export interface PokerWinner {
 
 export type ChipCounts = Record<number, number>;
 
-export type Screen = "lobby" | "blackjack" | "poker" | "craps" | "leaderboard" | "table-lobby" | "multiplayer-blackjack";
+export type Screen = "lobby" | "blackjack" | "poker" | "craps" | "roulette" | "leaderboard" | "table-lobby" | "multiplayer-blackjack";
 
 // Multiplayer types
 export interface GameTable {
@@ -76,6 +76,14 @@ export interface BlackjackGameState {
   results: Record<number, BlackjackResult> | null;
   turnOrder: number[];
   turnIndex: number;
+}
+
+export interface RouletteGameState {
+  bets: Record<number, { type: string; number?: number; amount: number }[]>;
+  readyPlayers: number[];
+  winningNumber: number | null;
+  results: Record<number, { totalBet: number; totalWin: number; netAmount: number; winningBets: string[] }> | null;
+  turnOrder: number[];
 }
 
 export interface GameStateRow {
