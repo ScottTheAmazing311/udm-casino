@@ -67,6 +67,25 @@ export async function POST(request: Request) {
         turnOrder,
         currentSpinnerIndex: 0,
       }
+    : table.game_type === "poker"
+    ? {
+        deck: [],
+        communityCards: [],
+        playerHoles: {},
+        bets: {},
+        roundBets: {},
+        folded: {},
+        allIn: {},
+        phase: "preflop",
+        pot: 0,
+        currentBet: 0,
+        turnOrder,
+        turnIndex: 0,
+        dealerIndex: 0,
+        lastRaiserIndex: null,
+        actedThisRound: {},
+        results: null,
+      }
     : {
         deck: [],
         dealerHand: [],

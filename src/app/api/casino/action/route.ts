@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createDeck, handValue } from "@/lib/game-logic";
-import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState, SlotsGameState } from "@/lib/types";
+import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState, SlotsGameState, PokerGameState } from "@/lib/types";
 import { spinWheel, resolveAllBets, RouletteBet } from "@/lib/roulette-logic";
 import { spin as spinSlots } from "@/lib/slots-logic";
+import { dealHoleCards, findNextActivePlayer, getActivePlayers, isRoundComplete, advancePhase, resolveShowdown } from "@/lib/poker-logic";
 
 export async function POST(request: Request) {
   const { tableId, playerId, action, payload } = await request.json();
@@ -31,6 +32,10 @@ export async function POST(request: Request) {
 
   if (session.game_type === "slots") {
     return handleSlotsAction(session, tableId, playerId, action, payload, supabase);
+  }
+
+  if (session.game_type === "poker") {
+    return handlePokerAction(session, tableId, playerId, action, payload, supabase);
   }
 
   return handleBlackjackAction(session, tableId, playerId, action, payload, supabase);
@@ -867,4 +872,300 @@ async function handleSlotsAction(
   }
 
   return NextResponse.json({ success: true, status, state, version: newVersion });
+}
+
+// ═══════════════════════════════════════════════════
+// POKER (Texas Hold'em)
+// ═══════════════════════════════════════════════════
+
+async function handlePokerAction(
+  session: Record<string, unknown>,
+  tableId: string,
+  playerId: number,
+  action: string,
+  payload: Record<string, unknown> | undefined,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const state = session.game_state as PokerGameState;
+  let status = session.status as string;
+  let currentTurnPlayerId = session.current_turn_player_id as number | null;
+  const newVersion = (session.version as number) + 1;
+  const TURN_TIMEOUT_MS = 30000;
+
+  const saveAndReturn = async () => {
+    const { error: updateErr } = await supabase
+      .from("udm_game_sessions")
+      .update({
+        status,
+        game_state: state,
+        current_turn_player_id: currentTurnPlayerId,
+        version: newVersion,
+      })
+      .eq("id", session.id);
+
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, status, state, version: newVersion });
+  };
+
+  const checkRoundAndAdvance = () => {
+    if (isRoundComplete(state)) {
+      if (state.phase === "river" || getActivePlayers(state).length <= 1) {
+        state.phase = "showdown";
+        resolveShowdown(state);
+        status = "resolving";
+        currentTurnPlayerId = null;
+      } else {
+        advancePhase(state);
+        currentTurnPlayerId = state.turnOrder[state.turnIndex];
+        state.turnStartedAt = new Date().toISOString();
+      }
+    } else {
+      state.turnIndex = findNextActivePlayer(state, (state.turnIndex + 1) % state.turnOrder.length);
+      currentTurnPlayerId = state.turnOrder[state.turnIndex];
+      state.turnStartedAt = new Date().toISOString();
+    }
+  };
+
+  // ── CHECK TIMEOUT ────────────────────
+  if (action === "check-timeout") {
+    if (status === "playing" && currentTurnPlayerId && state.turnStartedAt) {
+      const elapsed = Date.now() - new Date(state.turnStartedAt).getTime();
+      if (elapsed > TURN_TIMEOUT_MS) {
+        state.folded[currentTurnPlayerId] = true;
+        state.actedThisRound[currentTurnPlayerId] = true;
+        checkRoundAndAdvance();
+        return saveAndReturn();
+      }
+    }
+    return NextResponse.json({ success: true, noChange: true });
+  }
+
+  // ── DEAL ─────────────────────────────
+  if (action === "deal") {
+    if (status !== "betting") {
+      return NextResponse.json({ error: "Not in betting phase" }, { status: 400 });
+    }
+
+    const { data: table } = await supabase
+      .from("udm_casino_tables")
+      .select("min_bet")
+      .eq("id", tableId)
+      .single();
+
+    const bigBlind = table?.min_bet || 10;
+    const smallBlind = Math.floor(bigBlind / 2);
+
+    const numPlayers = state.turnOrder.length;
+    const sbIdx = numPlayers === 2 ? state.dealerIndex : (state.dealerIndex + 1) % numPlayers;
+    const bbIdx = (sbIdx + 1) % numPlayers;
+    const sbPlayer = state.turnOrder[sbIdx];
+    const bbPlayer = state.turnOrder[bbIdx];
+
+    for (const [pid, amount] of [[sbPlayer, smallBlind], [bbPlayer, bigBlind]] as [number, number][]) {
+      const { data: player } = await supabase
+        .from("udm_players")
+        .select("chips")
+        .eq("id", pid)
+        .single();
+
+      if (!player || player.chips < amount) {
+        return NextResponse.json({ error: `Player ${pid} doesn't have enough chips for blind` }, { status: 400 });
+      }
+    }
+
+    dealHoleCards(state, smallBlind, bigBlind);
+    status = "playing";
+    currentTurnPlayerId = state.turnOrder[state.turnIndex];
+    state.turnStartedAt = new Date().toISOString();
+
+    return saveAndReturn();
+  }
+
+  // ── FOLD ─────────────────────────────
+  if (action === "fold") {
+    if (status !== "playing") return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    if (currentTurnPlayerId !== playerId) return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+
+    state.folded[playerId] = true;
+    state.actedThisRound[playerId] = true;
+    checkRoundAndAdvance();
+    return saveAndReturn();
+  }
+
+  // ── CHECK ────────────────────────────
+  if (action === "check") {
+    if (status !== "playing") return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    if (currentTurnPlayerId !== playerId) return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+    if ((state.roundBets[playerId] || 0) < state.currentBet) {
+      return NextResponse.json({ error: "Cannot check, must call or raise" }, { status: 400 });
+    }
+
+    state.actedThisRound[playerId] = true;
+    checkRoundAndAdvance();
+    return saveAndReturn();
+  }
+
+  // ── CALL ─────────────────────────────
+  if (action === "call") {
+    if (status !== "playing") return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    if (currentTurnPlayerId !== playerId) return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+
+    const callAmount = state.currentBet - (state.roundBets[playerId] || 0);
+    if (callAmount <= 0) return NextResponse.json({ error: "Nothing to call" }, { status: 400 });
+
+    const { data: player } = await supabase.from("udm_players").select("chips").eq("id", playerId).single();
+    if (!player) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+
+    const actualCall = Math.min(callAmount, player.chips);
+    state.roundBets[playerId] = (state.roundBets[playerId] || 0) + actualCall;
+    state.bets[playerId] = (state.bets[playerId] || 0) + actualCall;
+    state.pot += actualCall;
+
+    if (actualCall >= player.chips) state.allIn[playerId] = true;
+
+    state.actedThisRound[playerId] = true;
+    checkRoundAndAdvance();
+    return saveAndReturn();
+  }
+
+  // ── RAISE ────────────────────────────
+  if (action === "raise") {
+    if (status !== "playing") return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    if (currentTurnPlayerId !== playerId) return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+
+    const raiseTotal = (payload?.amount as number) || 0;
+    if (raiseTotal <= state.currentBet) return NextResponse.json({ error: "Raise must be more than current bet" }, { status: 400 });
+
+    const { data: player } = await supabase.from("udm_players").select("chips").eq("id", playerId).single();
+    if (!player) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+
+    const alreadyBet = state.roundBets[playerId] || 0;
+    const needed = raiseTotal - alreadyBet;
+    if (needed > player.chips) return NextResponse.json({ error: "Insufficient chips" }, { status: 400 });
+
+    state.roundBets[playerId] = raiseTotal;
+    state.bets[playerId] = (state.bets[playerId] || 0) + needed;
+    state.pot += needed;
+    state.currentBet = raiseTotal;
+
+    if (needed >= player.chips) state.allIn[playerId] = true;
+
+    for (const pid of state.turnOrder) {
+      if (pid !== playerId && !state.folded[pid] && !state.allIn[pid]) {
+        state.actedThisRound[pid] = false;
+      }
+    }
+    state.actedThisRound[playerId] = true;
+    state.lastRaiserIndex = state.turnIndex;
+
+    checkRoundAndAdvance();
+    return saveAndReturn();
+  }
+
+  // ── ALL-IN ───────────────────────────
+  if (action === "all-in") {
+    if (status !== "playing") return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    if (currentTurnPlayerId !== playerId) return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+
+    const { data: player } = await supabase.from("udm_players").select("chips").eq("id", playerId).single();
+    if (!player || player.chips <= 0) return NextResponse.json({ error: "No chips" }, { status: 400 });
+
+    const allInAmount = player.chips;
+    const newRoundBet = (state.roundBets[playerId] || 0) + allInAmount;
+
+    state.roundBets[playerId] = newRoundBet;
+    state.bets[playerId] = (state.bets[playerId] || 0) + allInAmount;
+    state.pot += allInAmount;
+    state.allIn[playerId] = true;
+
+    if (newRoundBet > state.currentBet) {
+      state.currentBet = newRoundBet;
+      for (const pid of state.turnOrder) {
+        if (pid !== playerId && !state.folded[pid] && !state.allIn[pid]) {
+          state.actedThisRound[pid] = false;
+        }
+      }
+      state.lastRaiserIndex = state.turnIndex;
+    }
+
+    state.actedThisRound[playerId] = true;
+    checkRoundAndAdvance();
+    return saveAndReturn();
+  }
+
+  // ── NEW ROUND ────────────────────────
+  if (action === "new-round") {
+    if (state.results) {
+      for (const pid of state.turnOrder) {
+        const result = state.results[pid];
+        if (result) {
+          await supabase.rpc("update_player_chips", { p_player_id: pid, p_amount: result.amount });
+          await supabase.from("udm_game_results").insert({
+            session_id: session.id,
+            player_id: pid,
+            bet_amount: state.bets[pid] || 0,
+            payout: result.amount,
+            hand_description: result.hand,
+          });
+        }
+      }
+    }
+
+    await supabase
+      .from("udm_game_sessions")
+      .update({ status: "complete", completed_at: new Date().toISOString() })
+      .eq("id", session.id);
+
+    const { data: seats } = await supabase
+      .from("udm_casino_seats")
+      .select("*")
+      .eq("table_id", tableId)
+      .order("seat_number");
+
+    if (!seats || seats.length === 0) {
+      return NextResponse.json({ error: "No players seated" }, { status: 400 });
+    }
+
+    const turnOrder = seats.map((s) => s.player_id);
+    const newDealerIndex = (state.dealerIndex + 1) % turnOrder.length;
+
+    const newState: PokerGameState = {
+      deck: [],
+      communityCards: [],
+      playerHoles: {},
+      bets: {},
+      roundBets: {},
+      folded: {},
+      allIn: {},
+      phase: "preflop",
+      pot: 0,
+      currentBet: 0,
+      turnOrder,
+      turnIndex: 0,
+      dealerIndex: newDealerIndex,
+      lastRaiserIndex: null,
+      actedThisRound: {},
+      results: null,
+    };
+
+    const { data: newSession, error: newErr } = await supabase
+      .from("udm_game_sessions")
+      .insert({
+        table_id: tableId,
+        game_type: "poker",
+        status: "betting",
+        game_state: newState,
+        current_turn_player_id: null,
+        round_number: (session.round_number as number) + 1,
+      })
+      .select()
+      .single();
+
+    if (newErr) return NextResponse.json({ error: newErr.message }, { status: 500 });
+    return NextResponse.json({ success: true, session: newSession });
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

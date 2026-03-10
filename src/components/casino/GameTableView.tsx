@@ -17,6 +17,7 @@ import MusicButton from "@/components/ui/MusicButton";
 import ColbyTrainer from "@/components/games/ColbyTrainer";
 import RouletteTableView from "./RouletteTableView";
 import SlotsTableView from "./SlotsTableView";
+import PokerTableView from "./PokerTableView";
 import PlayerChipsSidebar from "./PlayerChipsSidebar";
 import ChatSidebar from "./ChatSidebar";
 
@@ -62,6 +63,17 @@ export default function GameTableView({
     return (
       <>
         <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />
+        <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
+        <PlayerChipsSidebar currentPlayerId={playerId} />
+      </>
+    );
+  }
+
+  // Dispatch to poker view
+  if (table.game_type === "poker") {
+    return (
+      <>
+        <PokerTableView table={table} playerId={playerId} onLeave={onLeave} />
         <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
         <PlayerChipsSidebar currentPlayerId={playerId} />
       </>
@@ -653,15 +665,15 @@ function BlackjackTableView({
 
 // Map game types to their background images
 const GAME_BACKGROUNDS: Record<string, string> = {
-  blackjack: "/blackjack-table-bg.png",
+  blackjack: "/blackjack2.png",
   poker: "/poker-table-bg.png",
   craps: "/craps-table-bg.png",
-  roulette: "/blackjack-table-bg.png",
+  roulette: "/blackjack2.png",
   slots: "/slots-bg.png",
 };
 
 function TableBackground({ gameType }: { gameType: string }) {
-  const bgSrc = GAME_BACKGROUNDS[gameType] || "/blackjack-table-bg.png";
+  const bgSrc = GAME_BACKGROUNDS[gameType] || "/blackjack2.png";
 
   return (
     <div className="absolute inset-0 z-0">

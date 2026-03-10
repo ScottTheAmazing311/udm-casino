@@ -103,6 +103,33 @@ export interface SlotsGameState {
   spinStartedAt?: string;
 }
 
+export type PokerPhase = "preflop" | "flop" | "turn" | "river" | "showdown";
+
+export interface PokerGameState {
+  deck: CardType[];
+  communityCards: CardType[];
+  playerHoles: Record<number, CardType[]>;
+  bets: Record<number, number>;        // total bet this hand
+  roundBets: Record<number, number>;    // bet this betting round
+  folded: Record<number, boolean>;
+  allIn: Record<number, boolean>;
+  phase: PokerPhase;
+  pot: number;
+  currentBet: number;                   // current bet level to call
+  turnOrder: number[];
+  turnIndex: number;
+  dealerIndex: number;                  // button position
+  lastRaiserIndex: number | null;
+  actedThisRound: Record<number, boolean>;
+  results: Record<number, PokerResult> | null;
+  turnStartedAt?: string;
+}
+
+export interface PokerResult {
+  hand: string;
+  amount: number;
+}
+
 export interface GameStateRow {
   id: string;
   table_id: string;
