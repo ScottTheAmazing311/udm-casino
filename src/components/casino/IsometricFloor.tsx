@@ -103,6 +103,7 @@ export default function IsometricFloor({
   }
 
   function startMakeMoney() {
+    playMusic("/Backseat Hustle.mp3");
     setMoneyPrompt("loading");
     setMoneyTimer(30);
 
@@ -132,6 +133,7 @@ export default function IsometricFloor({
   function closeMakeMoney() {
     setMoneyPrompt(null);
     if (moneyTimerRef.current) clearInterval(moneyTimerRef.current);
+    playMusic("/pixel-jackpot.mp3");
   }
 
   // Bar feature
