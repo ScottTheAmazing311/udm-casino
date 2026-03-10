@@ -12,6 +12,7 @@ import { useGameSession } from "@/hooks/useGameSession";
 import { getNumberColor, WHEEL_ORDER } from "@/lib/roulette-logic";
 import GameButton from "@/components/ui/GameButton";
 import PlayerAvatar from "@/components/ui/PlayerAvatar";
+import MusicButton from "@/components/ui/MusicButton";
 
 interface RouletteTableViewProps {
   table: CasinoTable;
@@ -88,6 +89,27 @@ export default function RouletteTableView({
   const myTotalBet = myBets.reduce((s, b) => s + b.amount, 0);
   const isReady = state?.readyPlayers?.includes(playerId) || false;
   const myResult = state?.results?.[playerId];
+
+  // Aggregate all player bets by cell key (e.g. "straight-7", "red", "dozen1")
+  const cellBets: Record<string, { playerId: number; amount: number }[]> = {};
+  if (state?.bets) {
+    for (const [pid, bets] of Object.entries(state.bets)) {
+      for (const bet of bets) {
+        const key = bet.type === "straight" ? `straight-${bet.number}` : bet.type;
+        if (!cellBets[key]) cellBets[key] = [];
+        const existing = cellBets[key].find((b) => b.playerId === Number(pid));
+        if (existing) {
+          existing.amount += bet.amount;
+        } else {
+          cellBets[key].push({ playerId: Number(pid), amount: bet.amount });
+        }
+      }
+    }
+  }
+
+  function getCellKey(type: string, number?: number): string {
+    return type === "straight" ? `straight-${number}` : type;
+  }
 
   function placeBet(target: BetTarget) {
     if (isReady) return;
@@ -174,7 +196,7 @@ export default function RouletteTableView({
 
           {seats.length >= 1 && seats.some((s) => s.player_id === playerId) && (
             <GameButton onClick={startGame} color="#FFD700" primary>
-              Spin the Wheel
+              Play
             </GameButton>
           )}
 
@@ -204,6 +226,7 @@ export default function RouletteTableView({
             <div className="text-white text-sm font-semibold">{table.table_name}</div>
             <div className="text-white/40 text-[9px] font-mono">Place your bets</div>
           </div>
+          <MusicButton />
           {/* Other players status */}
           <div className="flex gap-1">
             {state.turnOrder.filter((pid) => pid !== playerId).map((pid) => {
@@ -224,13 +247,14 @@ export default function RouletteTableView({
         <div className="relative z-10 flex-1 overflow-auto px-2 py-2">
           <div className="max-w-[380px] mx-auto">
             {/* Zero */}
-            <button
+            <BoardCell
+              label="0"
+              bg="#0a6e3a"
+              className="w-full h-10 rounded-lg mb-1 text-white font-bold text-sm border border-white/20"
+              bets={cellBets[getCellKey("straight", 0)]}
+              currentPlayerId={playerId}
               onClick={() => placeBet({ type: "straight", number: 0, label: "0" })}
-              className="w-full h-10 rounded-lg mb-1 text-white font-bold text-sm border border-white/20 active:scale-95 transition-transform"
-              style={{ background: "#0a6e3a" }}
-            >
-              0
-            </button>
+            />
 
             {/* Number grid */}
             <div className="grid grid-cols-3 gap-[2px] mb-1">
@@ -238,16 +262,15 @@ export default function RouletteTableView({
                 row.map((n) => {
                   const color = getNumberColor(n);
                   return (
-                    <button
+                    <BoardCell
                       key={n}
+                      label={`${n}`}
+                      bg={color === "red" ? "#c0392b" : "#1a1a2e"}
+                      className="h-9 rounded text-white font-bold text-xs border border-white/10"
+                      bets={cellBets[getCellKey("straight", n)]}
+                      currentPlayerId={playerId}
                       onClick={() => placeBet({ type: "straight", number: n, label: `${n}` })}
-                      className="h-9 rounded text-white font-bold text-xs border border-white/10 active:scale-95 transition-transform"
-                      style={{
-                        background: color === "red" ? "#c0392b" : "#1a1a2e",
-                      }}
-                    >
-                      {n}
-                    </button>
+                    />
                   );
                 })
               )}
@@ -260,13 +283,15 @@ export default function RouletteTableView({
                 { type: "col2", label: "2:1" },
                 { type: "col3", label: "2:1" },
               ].map((b) => (
-                <button
+                <BoardCell
                   key={b.type}
+                  label={b.label}
+                  bg="rgba(255,255,255,0.05)"
+                  className="h-8 rounded text-[10px] text-white/70 font-bold border border-white/10"
+                  bets={cellBets[getCellKey(b.type)]}
+                  currentPlayerId={playerId}
                   onClick={() => placeBet({ type: b.type, label: b.label })}
-                  className="h-8 rounded text-[10px] text-white/70 font-bold border border-white/10 bg-white/5 active:scale-95 transition-transform"
-                >
-                  {b.label}
-                </button>
+                />
               ))}
             </div>
 
@@ -277,13 +302,15 @@ export default function RouletteTableView({
                 { type: "dozen2", label: "2nd 12" },
                 { type: "dozen3", label: "3rd 12" },
               ].map((b) => (
-                <button
+                <BoardCell
                   key={b.type}
+                  label={b.label}
+                  bg="rgba(255,255,255,0.05)"
+                  className="h-9 rounded text-[10px] text-white/70 font-bold border border-white/10"
+                  bets={cellBets[getCellKey(b.type)]}
+                  currentPlayerId={playerId}
                   onClick={() => placeBet({ type: b.type, label: b.label })}
-                  className="h-9 rounded text-[10px] text-white/70 font-bold border border-white/10 bg-white/5 active:scale-95 transition-transform"
-                >
-                  {b.label}
-                </button>
+                />
               ))}
             </div>
 
@@ -297,14 +324,15 @@ export default function RouletteTableView({
                 { type: "odd", label: "ODD" },
                 { type: "high", label: "19-36" },
               ].map((b) => (
-                <button
+                <BoardCell
                   key={b.type}
+                  label={b.label}
+                  bg={(b as { bg?: string }).bg || "rgba(255,255,255,0.05)"}
+                  className="h-9 rounded text-[9px] text-white/70 font-bold border border-white/10"
+                  bets={cellBets[getCellKey(b.type)]}
+                  currentPlayerId={playerId}
                   onClick={() => placeBet({ type: b.type, label: b.label })}
-                  className="h-9 rounded text-[9px] text-white/70 font-bold border border-white/10 active:scale-95 transition-transform"
-                  style={{ background: (b as { bg?: string }).bg || "rgba(255,255,255,0.05)" }}
-                >
-                  {b.label}
-                </button>
+                />
               ))}
             </div>
           </div>
@@ -394,6 +422,7 @@ export default function RouletteTableView({
           <div className="flex-1">
             <div className="text-white text-sm font-semibold">{table.table_name}</div>
           </div>
+          <MusicButton />
         </div>
 
         {/* Wheel / Result */}
@@ -523,7 +552,7 @@ function TableBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/craps-table-bg.png"
+        src="/blackjack-table-bg.png"
         alt=""
         fill
         className="object-cover object-top"
@@ -537,6 +566,60 @@ function TableBg() {
         }}
       />
     </div>
+  );
+}
+
+function BoardCell({
+  label,
+  bg,
+  className,
+  bets,
+  currentPlayerId,
+  onClick,
+}: {
+  label: string;
+  bg: string;
+  className: string;
+  bets?: { playerId: number; amount: number }[];
+  currentPlayerId: number;
+  onClick: () => void;
+}) {
+  const hasBets = bets && bets.length > 0;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`${className} active:scale-95 transition-transform relative overflow-hidden`}
+      style={{ background: bg }}
+    >
+      {label}
+      {hasBets && (
+        <div className="absolute top-0.5 right-0.5 flex flex-col items-end gap-px">
+          {bets.map((b, i) => {
+            const isMe = b.playerId === currentPlayerId;
+            const color = isMe ? "#FFD700" : getPlayerColor(b.playerId);
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-px"
+              >
+                <div
+                  className="w-[14px] h-[14px] rounded-full flex items-center justify-center text-[6px] font-bold border"
+                  style={{
+                    background: `linear-gradient(135deg, ${color}, ${color}99)`,
+                    borderColor: `${color}cc`,
+                    color: isMe ? "#000" : "#fff",
+                    boxShadow: `0 1px 3px ${color}44`,
+                  }}
+                >
+                  {b.amount >= 1000 ? `${Math.floor(b.amount / 1000)}k` : b.amount}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </button>
   );
 }
 

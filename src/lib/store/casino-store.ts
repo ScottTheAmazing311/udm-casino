@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export interface CasinoTable {
   id: string;
-  game_type: "blackjack" | "poker" | "craps" | "roulette";
+  game_type: "blackjack" | "poker" | "craps" | "roulette" | "slots";
   table_name: string;
   floor_x: number;
   floor_y: number;
@@ -46,6 +46,12 @@ interface CasinoState {
   showLeaderboard: boolean;
   showChat: boolean;
 
+  // Music
+  musicTrack: string | null;
+  musicPlaying: boolean;
+  musicMuted: boolean;
+  _audio: HTMLAudioElement | null;
+
   // Actions
   setSession: (playerId: number, playerName: string) => void;
   clearSession: () => void;
@@ -56,9 +62,12 @@ interface CasinoState {
   selectTable: (tableId: string | null) => void;
   toggleLeaderboard: () => void;
   toggleChat: () => void;
+  playMusic: (track: string) => void;
+  toggleMusicMute: () => void;
+  stopMusic: () => void;
 }
 
-export const useCasinoStore = create<CasinoState>((set) => ({
+export const useCasinoStore = create<CasinoState>((set, get) => ({
   playerId: null,
   playerName: null,
   casinoTables: [],
@@ -68,6 +77,10 @@ export const useCasinoStore = create<CasinoState>((set) => ({
   selectedTableId: null,
   showLeaderboard: false,
   showChat: false,
+  musicTrack: null,
+  musicPlaying: false,
+  musicMuted: false,
+  _audio: null,
 
   setSession: (playerId, playerName) => set({ playerId, playerName }),
   clearSession: () => set({ playerId: null, playerName: null }),
@@ -78,4 +91,49 @@ export const useCasinoStore = create<CasinoState>((set) => ({
   selectTable: (selectedTableId) => set({ selectedTableId }),
   toggleLeaderboard: () => set((s) => ({ showLeaderboard: !s.showLeaderboard })),
   toggleChat: () => set((s) => ({ showChat: !s.showChat })),
+
+  playMusic: (track: string) => {
+    const state = get();
+    // Same track already playing — don't restart
+    if (state.musicTrack === track && state._audio) {
+      if (state.musicMuted) return;
+      state._audio.play().catch(() => {});
+      set({ musicPlaying: true });
+      return;
+    }
+    // Stop old audio
+    if (state._audio) {
+      state._audio.pause();
+      state._audio.src = "";
+    }
+    const audio = new Audio(track);
+    audio.loop = true;
+    audio.volume = 0.3;
+    if (!state.musicMuted) {
+      audio.play().catch(() => {});
+    }
+    set({ _audio: audio, musicTrack: track, musicPlaying: !state.musicMuted });
+  },
+
+  toggleMusicMute: () => {
+    const state = get();
+    const newMuted = !state.musicMuted;
+    if (state._audio) {
+      if (newMuted) {
+        state._audio.pause();
+      } else {
+        state._audio.play().catch(() => {});
+      }
+    }
+    set({ musicMuted: newMuted, musicPlaying: !newMuted });
+  },
+
+  stopMusic: () => {
+    const state = get();
+    if (state._audio) {
+      state._audio.pause();
+      state._audio.src = "";
+    }
+    set({ _audio: null, musicTrack: null, musicPlaying: false });
+  },
 }));

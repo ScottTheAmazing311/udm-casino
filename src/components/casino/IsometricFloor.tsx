@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, LogOut, Coins, HelpCircle } from "lucide-react";
+import { Trophy, LogOut, Coins, HelpCircle, DollarSign } from "lucide-react";
 import Image from "next/image";
 import { HEADSHOTS } from "@/lib/headshots";
 import { PLAYERS } from "@/lib/constants";
@@ -12,6 +12,7 @@ import { useCasinoStore } from "@/lib/store/casino-store";
 import { supabase } from "@/lib/supabase";
 import Leaderboard from "./Leaderboard";
 import ChatSidebar from "./ChatSidebar";
+import MusicButton from "@/components/ui/MusicButton";
 
 interface IsometricFloorProps {
   playerId: number;
@@ -32,6 +33,8 @@ const TAP_ZONES = [
   { id: "craps", gameType: "craps", label: "Craps", top: 54, left: 54, width: 42, height: 14 },
   // Roulette — centered around x:76% y:78%
   { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
+  // Make Money — bottom right corner below roulette
+  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 85, left: 15, width: 40, height: 14 },
 ];
 
 const BOUNDS = { minX: 5, maxX: 95, minY: 16, maxY: 92 };
@@ -53,15 +56,81 @@ export default function IsometricFloor({
   } | null>(null);
   const [imgSize, setImgSize] = useState({ w: 390, h: 844, x: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioStarted = useRef(false);
 
   const { casinoTables, casinoSeats, playerStats, sitDown } = useCasinoFloor();
-  const { showLeaderboard, toggleLeaderboard, onlinePlayers } = useCasinoStore();
+  const { showLeaderboard, toggleLeaderboard, onlinePlayers, playMusic } = useCasinoStore();
   const { goOffline } = usePresence(playerId);
 
   const myChips = playerStats.find((p) => p.id === playerId)?.chips ?? 1000;
   const currentPlayer = PLAYERS.find((p) => p.id === playerId);
+
+  // Make Money feature
+  const [moneyPrompt, setMoneyPrompt] = useState<"confirm" | "loading" | "done" | null>(null);
+  const [moneyTimer, setMoneyTimer] = useState(30);
+  const [moneyPayout, setMoneyPayout] = useState(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const moneyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+  const COOLDOWN_KEY = `makemoney-cooldown-${playerId}`;
+
+  // Check cooldown on mount and periodically
+  useEffect(() => {
+    function checkCooldown() {
+      const lastUsed = localStorage.getItem(COOLDOWN_KEY);
+      if (lastUsed) {
+        const elapsed = Date.now() - Number(lastUsed);
+        if (elapsed < COOLDOWN_MS) {
+          setCooldownRemaining(Math.ceil((COOLDOWN_MS - elapsed) / 1000));
+        } else {
+          setCooldownRemaining(0);
+        }
+      }
+    }
+    checkCooldown();
+    const interval = setInterval(checkCooldown, 1000);
+    return () => clearInterval(interval);
+  }, [COOLDOWN_KEY, COOLDOWN_MS]);
+
+  function handleMakeMoneyTap() {
+    if (cooldownRemaining > 0) {
+      setMoneyPrompt("confirm"); // will show cooldown message
+      return;
+    }
+    setMoneyPrompt("confirm");
+  }
+
+  function startMakeMoney() {
+    setMoneyPrompt("loading");
+    setMoneyTimer(30);
+
+    moneyTimerRef.current = setInterval(() => {
+      setMoneyTimer((prev) => {
+        if (prev <= 1) {
+          if (moneyTimerRef.current) clearInterval(moneyTimerRef.current);
+          // Calculate payout
+          const payout = Math.floor(Math.random() * 176) + 25; // 25-200
+          setMoneyPayout(payout);
+          // Award chips
+          supabase.rpc("update_player_chips", {
+            p_player_id: playerId,
+            p_amount: payout,
+          });
+          // Set cooldown
+          localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
+          setCooldownRemaining(COOLDOWN_MS / 1000);
+          setMoneyPrompt("done");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function closeMakeMoney() {
+    setMoneyPrompt(null);
+    if (moneyTimerRef.current) clearInterval(moneyTimerRef.current);
+  }
 
   // AFK idle detection
   const [showAfkPrompt, setShowAfkPrompt] = useState(false);
@@ -145,23 +214,8 @@ export default function IsometricFloor({
     return () => window.removeEventListener("resize", calc);
   }, []);
 
-  // Background music
-  useEffect(() => {
-    const audio = new Audio("/pixel-jackpot.mp3");
-    audio.loop = true;
-    audio.volume = 0.3;
-    audioRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.src = "";
-    };
-  }, []);
-
   function startMusic() {
-    if (!audioStarted.current && audioRef.current) {
-      audioRef.current.play().catch(() => {});
-      audioStarted.current = true;
-    }
+    playMusic("/pixel-jackpot.mp3");
   }
 
   function handleFloorTap(e: React.MouseEvent<HTMLDivElement>) {
@@ -185,6 +239,10 @@ export default function IsometricFloor({
           x: clamp(zone.left + zone.width / 2, BOUNDS.minX, BOUNDS.maxX),
           y: clamp(zone.top + zone.height + 4, BOUNDS.minY, BOUNDS.maxY),
         });
+        if (zone.gameType === "makemoney") {
+          handleMakeMoneyTap();
+          return;
+        }
         setTablePrompt({ gameType: zone.gameType, label: zone.label });
         return;
       }
@@ -357,6 +415,31 @@ export default function IsometricFloor({
               </div>
             );
           })}
+
+        {/* Make Money character */}
+        <div
+          className="absolute z-10 pointer-events-none flex flex-col items-center"
+          style={{
+            left: "32%",
+            top: "88%",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <Image
+            src="/makemoney.png"
+            alt="Make Money"
+            width={50}
+            height={70}
+            className="drop-shadow-lg"
+            style={{ imageRendering: "auto" }}
+          />
+          <div
+            className="mt-0.5 px-2 py-0.5 rounded-full text-[7px] font-bold whitespace-nowrap"
+            style={{ background: "rgba(255,215,0,0.2)", color: "#FFD700" }}
+          >
+            <DollarSign size={8} className="inline -mt-px" /> Make Money
+          </div>
+        </div>
       </div>
 
       {/* HUD — Top Bar */}
@@ -394,6 +477,7 @@ export default function IsometricFloor({
         >
           <Trophy size={14} className="text-casino-gold" />
         </button>
+        <MusicButton />
         <button
           onClick={onLogout}
           className="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -437,11 +521,11 @@ export default function IsometricFloor({
                 {tablePrompt.label}
               </div>
               <div className="text-[#666] text-xs mb-5">
-                {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette"
+                {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots"
                   ? `${seatedCount(tablePrompt.gameType)} players seated`
                   : "Coming Soon"}
               </div>
-              {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" ? (
+              {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots" ? (
                 <div className="flex gap-2 justify-center">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -472,6 +556,186 @@ export default function IsometricFloor({
                 >
                   Coming Soon
                 </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Make Money Modal */}
+      <AnimatePresence>
+        {moneyPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.7)" }}
+            onClick={(e) => { e.stopPropagation(); if (moneyPrompt === "confirm" || moneyPrompt === "done") closeMakeMoney(); }}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="rounded-2xl p-6 text-center max-w-xs w-full mx-4"
+              style={{
+                background: "linear-gradient(135deg, #111118, #0d0d15)",
+                border: "1px solid #2a2a3a",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Confirm */}
+              {moneyPrompt === "confirm" && (
+                <>
+                  <div className="w-20 h-28 mx-auto mb-3 relative">
+                    <Image
+                      src="/makemoney.png"
+                      alt="Make Money"
+                      width={80}
+                      height={112}
+                      className="object-contain"
+                    />
+                  </div>
+                  <div className="text-white text-lg font-bold mb-1">
+                    Make some money?
+                  </div>
+                  {cooldownRemaining > 0 ? (
+                    <>
+                      <div className="text-[#666] text-xs mb-5">
+                        Come back in {Math.floor(cooldownRemaining / 60)}m {cooldownRemaining % 60}s
+                      </div>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={closeMakeMoney}
+                        className="px-6 py-2.5 rounded-xl text-sm font-medium text-white/50"
+                        style={{ background: "rgba(255,255,255,0.05)" }}
+                      >
+                        OK
+                      </motion.button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-[#666] text-xs mb-5">
+                        Put in some work and earn $25-$200
+                      </div>
+                      <div className="flex gap-2 justify-center">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={startMakeMoney}
+                          className="px-6 py-2.5 rounded-xl text-sm font-bold"
+                          style={{
+                            background: "linear-gradient(135deg, #4ADE80, #22C55E)",
+                            color: "#000",
+                          }}
+                        >
+                          Yeah!
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={closeMakeMoney}
+                          className="px-5 py-2.5 rounded-xl text-sm font-medium text-white/50"
+                          style={{ background: "rgba(255,255,255,0.05)" }}
+                        >
+                          Nah
+                        </motion.button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Loading */}
+              {moneyPrompt === "loading" && (
+                <>
+                  <div className="w-20 h-28 mx-auto mb-4 relative">
+                    <motion.div
+                      animate={{ rotate: [0, -3, 3, -3, 0] }}
+                      transition={{ duration: 0.5, repeat: Infinity }}
+                    >
+                      <Image
+                        src="/makemoney.png"
+                        alt="Working..."
+                        width={80}
+                        height={112}
+                        className="object-contain"
+                      />
+                    </motion.div>
+                  </div>
+                  <div className="text-white text-lg font-bold mb-2">
+                    Hustlin&apos;...
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full h-3 rounded-full overflow-hidden mb-2"
+                    style={{ background: "rgba(255,255,255,0.1)" }}
+                  >
+                    <motion.div
+                      className="h-full rounded-full"
+                      initial={{ width: "0%" }}
+                      animate={{ width: "100%" }}
+                      transition={{ duration: 30, ease: "linear" }}
+                      style={{ background: "linear-gradient(90deg, #FFD700, #4ADE80)" }}
+                    />
+                  </div>
+
+                  <div className="text-casino-gold font-mono text-2xl font-bold mb-1">
+                    {moneyTimer}s
+                  </div>
+                  <div className="text-[#666] text-[10px]">
+                    Getting that bread...
+                  </div>
+                </>
+              )}
+
+              {/* Done */}
+              {moneyPrompt === "done" && (
+                <>
+                  <div className="w-20 h-28 mx-auto mb-3 relative">
+                    <Image
+                      src="/makemoney.png"
+                      alt="Paid"
+                      width={80}
+                      height={112}
+                      className="object-contain"
+                    />
+                  </div>
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200 }}
+                  >
+                    <div className="text-white text-lg font-bold mb-2">
+                      Money made!
+                    </div>
+                    <span
+                      className="inline-block px-5 py-2 rounded-full text-xl font-bold mb-4"
+                      style={{
+                        background: "rgba(74,222,128,0.15)",
+                        color: "#4ADE80",
+                        border: "1px solid #4ADE8033",
+                      }}
+                    >
+                      +${moneyPayout}
+                    </span>
+                  </motion.div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={closeMakeMoney}
+                    className="px-6 py-2.5 rounded-xl text-sm font-bold mt-2"
+                    style={{
+                      background: "linear-gradient(135deg, #FFD700, #FFA500)",
+                      color: "#000",
+                    }}
+                  >
+                    Nice!
+                  </motion.button>
+                </>
               )}
             </motion.div>
           </motion.div>

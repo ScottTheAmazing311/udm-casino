@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createDeck, handValue } from "@/lib/game-logic";
-import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState } from "@/lib/types";
+import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState, SlotsGameState } from "@/lib/types";
 import { spinWheel, resolveAllBets, RouletteBet } from "@/lib/roulette-logic";
+import { spin as spinSlots } from "@/lib/slots-logic";
 
 export async function POST(request: Request) {
   const { tableId, playerId, action, payload } = await request.json();
@@ -26,6 +27,10 @@ export async function POST(request: Request) {
   // Route to game-specific handler
   if (session.game_type === "roulette") {
     return handleRouletteAction(session, tableId, playerId, action, payload, supabase);
+  }
+
+  if (session.game_type === "slots") {
+    return handleSlotsAction(session, tableId, playerId, action, payload, supabase);
   }
 
   return handleBlackjackAction(session, tableId, playerId, action, payload, supabase);
@@ -703,6 +708,156 @@ async function handleBlackjackAction(
       status,
       game_state: state,
       current_turn_player_id: currentTurnPlayerId,
+      version: newVersion,
+    })
+    .eq("id", session.id);
+
+  if (updateErr) {
+    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, status, state, version: newVersion });
+}
+
+// ═══════════════════════════════════════════════════
+// SLOTS
+// ═══════════════════════════════════════════════════
+
+async function handleSlotsAction(
+  session: Record<string, unknown>,
+  tableId: string,
+  playerId: number,
+  action: string,
+  payload: Record<string, unknown> | undefined,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const state = session.game_state as SlotsGameState;
+  let status = session.status as string;
+  const newVersion = (session.version as number) + 1;
+
+  // ── SPIN (bet + spin in one action) ─────
+  if (action === "spin") {
+    if (status !== "betting") {
+      return NextResponse.json({ error: "Not in betting phase" }, { status: 400 });
+    }
+
+    // Verify it's this player's turn
+    if (state.turnOrder[state.currentSpinnerIndex] !== playerId) {
+      return NextResponse.json({ error: "Not your turn" }, { status: 400 });
+    }
+
+    const amount = (payload?.amount as number) || 0;
+    if (amount <= 0) {
+      return NextResponse.json({ error: "Invalid bet" }, { status: 400 });
+    }
+
+    // Check player chips
+    const { data: player } = await supabase
+      .from("udm_players")
+      .select("chips")
+      .eq("id", playerId)
+      .single();
+
+    if (!player || player.chips < amount) {
+      return NextResponse.json({ error: "Insufficient chips" }, { status: 400 });
+    }
+
+    // Spin the reels
+    const result = spinSlots();
+
+    state.bet = amount;
+    state.reels = result.reels;
+    state.multiplier = result.multiplier;
+    state.winType = result.winType;
+    state.winDescription = result.winDescription;
+
+    const payout = result.multiplier > 0 ? amount * result.multiplier : 0;
+    state.netAmount = payout - amount;
+
+    // Update player chips
+    await supabase.rpc("update_player_chips", {
+      p_player_id: playerId,
+      p_amount: state.netAmount,
+    });
+
+    // Record result
+    await supabase.from("udm_game_results").insert({
+      session_id: session.id,
+      player_id: playerId,
+      bet_amount: amount,
+      payout: state.netAmount,
+      hand_description: result.winDescription,
+    });
+
+    status = "resolving";
+    state.spinStartedAt = new Date().toISOString();
+  }
+
+  // ── NEW ROUND ──────────────────────────
+  else if (action === "new-round") {
+    await supabase
+      .from("udm_game_sessions")
+      .update({ status: "complete", completed_at: new Date().toISOString() })
+      .eq("id", session.id);
+
+    const { data: seats } = await supabase
+      .from("udm_casino_seats")
+      .select("*")
+      .eq("table_id", tableId)
+      .order("seat_number");
+
+    if (!seats || seats.length === 0) {
+      return NextResponse.json({ error: "No players seated" }, { status: 400 });
+    }
+
+    const turnOrder = seats.map((s) => s.player_id);
+
+    // Advance to next spinner (round-robin)
+    let nextIndex = (state.currentSpinnerIndex + 1) % turnOrder.length;
+    if (nextIndex >= turnOrder.length) nextIndex = 0;
+
+    const newState: SlotsGameState = {
+      bet: null,
+      reels: null,
+      multiplier: 0,
+      winType: null,
+      winDescription: null,
+      netAmount: null,
+      turnOrder,
+      currentSpinnerIndex: nextIndex,
+    };
+
+    const { data: newSession, error: newErr } = await supabase
+      .from("udm_game_sessions")
+      .insert({
+        table_id: tableId,
+        game_type: "slots",
+        status: "betting",
+        game_state: newState,
+        current_turn_player_id: turnOrder[nextIndex],
+        round_number: (session.round_number as number) + 1,
+      })
+      .select()
+      .single();
+
+    if (newErr) {
+      return NextResponse.json({ error: newErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, session: newSession });
+  }
+
+  else {
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  }
+
+  // Save state
+  const { error: updateErr } = await supabase
+    .from("udm_game_sessions")
+    .update({
+      status,
+      game_state: state,
+      current_turn_player_id: state.turnOrder[state.currentSpinnerIndex],
       version: newVersion,
     })
     .eq("id", session.id);

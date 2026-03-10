@@ -8,13 +8,15 @@ import { PLAYERS } from "@/lib/constants";
 import { HEADSHOTS } from "@/lib/headshots";
 import { handValue } from "@/lib/game-logic";
 import { BlackjackGameState } from "@/lib/types";
-import { CasinoTable } from "@/lib/store/casino-store";
+import { CasinoTable, useCasinoStore } from "@/lib/store/casino-store";
 import { useGameSession } from "@/hooks/useGameSession";
 import Card from "@/components/ui/Card";
 import PlayerAvatar from "@/components/ui/PlayerAvatar";
 import GameButton from "@/components/ui/GameButton";
+import MusicButton from "@/components/ui/MusicButton";
 import ColbyTrainer from "@/components/games/ColbyTrainer";
 import RouletteTableView from "./RouletteTableView";
+import SlotsTableView from "./SlotsTableView";
 import PlayerChipsSidebar from "./PlayerChipsSidebar";
 import ChatSidebar from "./ChatSidebar";
 
@@ -32,18 +34,45 @@ function getPlayerColor(id: number): string {
   return PLAYERS.find((p) => p.id === id)?.color || "#666";
 }
 
+const GAME_MUSIC: Record<string, string> = {
+  blackjack: "/backroom-shuffle.mp3",
+};
+
 export default function GameTableView({
   table,
   playerId,
   onLeave,
 }: GameTableViewProps) {
   const pName = getPlayerName(playerId);
+  const { playMusic } = useCasinoStore();
+
+  // Switch music when entering a game table
+  useEffect(() => {
+    const track = GAME_MUSIC[table.game_type] || "/pixel-jackpot.mp3";
+    playMusic(track);
+    return () => {
+      // Restore lobby music when leaving
+      playMusic("/pixel-jackpot.mp3");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table.game_type]);
 
   // Dispatch to roulette view
   if (table.game_type === "roulette") {
     return (
       <>
         <RouletteTableView table={table} playerId={playerId} onLeave={onLeave} />
+        <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
+        <PlayerChipsSidebar currentPlayerId={playerId} />
+      </>
+    );
+  }
+
+  // Dispatch to slots view
+  if (table.game_type === "slots") {
+    return (
+      <>
+        <SlotsTableView table={table} playerId={playerId} onLeave={onLeave} />
         <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
         <PlayerChipsSidebar currentPlayerId={playerId} />
       </>
@@ -627,7 +656,7 @@ const GAME_BACKGROUNDS: Record<string, string> = {
   blackjack: "/blackjack-table-bg.png",
   poker: "/poker-table-bg.png",
   craps: "/craps-table-bg.png",
-  roulette: "/craps-table-bg.png",
+  roulette: "/blackjack-table-bg.png",
   slots: "/slots-bg.png",
 };
 
@@ -670,6 +699,7 @@ function TopBar({ table, onLeave }: { table: CasinoTable; onLeave: () => void })
         <div className="text-white text-sm font-semibold drop-shadow-lg">{table.table_name}</div>
         <div className="text-white/40 text-[9px] font-mono">${table.min_bet}-${table.max_bet}</div>
       </div>
+      <MusicButton />
     </div>
   );
 }

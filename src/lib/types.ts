@@ -91,6 +91,18 @@ export interface RouletteGameState {
   turnOrder: number[];
 }
 
+export interface SlotsGameState {
+  bet: number | null;
+  reels: [string, string, string] | null;
+  multiplier: number;
+  winType: "jackpot" | "three" | "two" | "none" | null;
+  winDescription: string | null;
+  netAmount: number | null;
+  turnOrder: number[];
+  currentSpinnerIndex: number;
+  spinStartedAt?: string;
+}
+
 export interface GameStateRow {
   id: string;
   table_id: string;

@@ -101,7 +101,7 @@ export default function ChatSidebar({ playerId, playerName, chatContext }: ChatS
       {!open && (
         <button
           onClick={() => { setOpen(true); setUnread(0); }}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full"
+          className="fixed bottom-4 left-[75%] -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full"
           style={{
             background: "rgba(17,17,24,0.9)",
             border: "1px solid #2a2a3a",
@@ -130,7 +130,7 @@ export default function ChatSidebar({ playerId, playerName, chatContext }: ChatS
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 300, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col"
+            className="fixed bottom-4 left-[75%] -translate-x-1/2 z-50 flex flex-col"
             style={{
               width: "min(360px, calc(100vw - 32px))",
               maxHeight: "50vh",

@@ -56,6 +56,17 @@ export async function POST(request: Request) {
         results: null,
         turnOrder,
       }
+    : table.game_type === "slots"
+    ? {
+        bet: null,
+        reels: null,
+        multiplier: 0,
+        winType: null,
+        winDescription: null,
+        netAmount: null,
+        turnOrder,
+        currentSpinnerIndex: 0,
+      }
     : {
         deck: [],
         dealerHand: [],
