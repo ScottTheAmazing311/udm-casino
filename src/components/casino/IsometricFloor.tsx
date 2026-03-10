@@ -51,6 +51,8 @@ export default function IsometricFloor({
   } | null>(null);
   const [imgSize, setImgSize] = useState({ w: 390, h: 844, x: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioStarted = useRef(false);
 
   const { casinoTables, casinoSeats, playerStats, sitDown } = useCasinoFloor();
   const { showLeaderboard, toggleLeaderboard, onlinePlayers } = useCasinoStore();
@@ -85,7 +87,27 @@ export default function IsometricFloor({
     return () => window.removeEventListener("resize", calc);
   }, []);
 
+  // Background music
+  useEffect(() => {
+    const audio = new Audio("/pixel-jackpot.mp3");
+    audio.loop = true;
+    audio.volume = 0.3;
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
+    };
+  }, []);
+
+  function startMusic() {
+    if (!audioStarted.current && audioRef.current) {
+      audioRef.current.play().catch(() => {});
+      audioStarted.current = true;
+    }
+  }
+
   function handleFloorTap(e: React.MouseEvent<HTMLDivElement>) {
+    startMusic();
     // Get tap position relative to the image container
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
