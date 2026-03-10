@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, LogOut, Coins, HelpCircle, DollarSign } from "lucide-react";
+import { Trophy, LogOut, Coins, HelpCircle, DollarSign, Wine } from "lucide-react";
 import Image from "next/image";
 import { HEADSHOTS } from "@/lib/headshots";
 import { PLAYERS } from "@/lib/constants";
@@ -33,6 +33,8 @@ const TAP_ZONES = [
   { id: "craps", gameType: "craps", label: "Craps", top: 54, left: 54, width: 42, height: 14 },
   // Roulette — centered around x:76% y:78%
   { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
+  // Bar — top left area
+  { id: "bar", gameType: "bar", label: "The Bar", top: 49, left: 24, width: 30, height: 14 },
   // Make Money — bottom right corner below roulette
   { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 85, left: 15, width: 40, height: 14 },
 ];
@@ -130,6 +132,144 @@ export default function IsometricFloor({
   function closeMakeMoney() {
     setMoneyPrompt(null);
     if (moneyTimerRef.current) clearInterval(moneyTimerRef.current);
+  }
+
+  // Bar feature
+  const [barPrompt, setBarPrompt] = useState<"menu" | "drinking" | null>(null);
+  const [barTimer, setBarTimer] = useState(30);
+  const barTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const barCanvasRef = useRef<HTMLCanvasElement>(null);
+  const barAnimRef = useRef<number | null>(null);
+
+  const DRINKS = [
+    { name: "Whiskey Sour", emoji: "🥃", color: "#D97706" },
+    { name: "Martini", emoji: "🍸", color: "#60A5FA" },
+    { name: "Champagne", emoji: "🥂", color: "#FFD700" },
+    { name: "Negroni", emoji: "🍹", color: "#EF4444" },
+    { name: "Old Fashioned", emoji: "🥃", color: "#B45309" },
+    { name: "Mojito", emoji: "🍸", color: "#34D399" },
+  ];
+
+  const [selectedDrink, setSelectedDrink] = useState(DRINKS[0]);
+
+  function handleBarTap() {
+    setBarPrompt("menu");
+  }
+
+  async function orderDrink(drink: typeof DRINKS[0]) {
+    setSelectedDrink(drink);
+    // Deduct $1
+    await supabase.rpc("update_player_chips", {
+      p_player_id: playerId,
+      p_amount: -1,
+    });
+    setBarPrompt("drinking");
+    setBarTimer(30);
+
+    barTimerRef.current = setInterval(() => {
+      setBarTimer((prev) => {
+        if (prev <= 1) {
+          if (barTimerRef.current) clearInterval(barTimerRef.current);
+          closeBar();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  // Vegas music visualizer animation
+  useEffect(() => {
+    if (barPrompt !== "drinking" || !barCanvasRef.current) return;
+
+    const canvas = barCanvasRef.current;
+    const ctx = canvas.getContext("2d")!;
+    const W = canvas.width;
+    const H = canvas.height;
+    const bars = 32;
+    const barWidth = W / bars;
+    const heights = new Array(bars).fill(0);
+
+    // Vegas neon colors
+    const neonColors = [
+      "#FF1493", "#FFD700", "#00FF88", "#FF4500",
+      "#00BFFF", "#FF69B4", "#ADFF2F", "#FF6347",
+      "#7B68EE", "#FFD700", "#00CED1", "#FF1493",
+    ];
+
+    function animate() {
+      ctx.clearRect(0, 0, W, H);
+
+      // Dark bg with stars
+      ctx.fillStyle = "#0a0a1a";
+      ctx.fillRect(0, 0, W, H);
+
+      // Twinkling stars
+      for (let i = 0; i < 20; i++) {
+        const sx = (Math.sin(Date.now() * 0.001 + i * 7) + 1) / 2 * W;
+        const sy = (Math.cos(Date.now() * 0.0008 + i * 5) + 1) / 2 * (H * 0.3);
+        const size = Math.sin(Date.now() * 0.003 + i) * 1 + 1.5;
+        ctx.fillStyle = `rgba(255,255,255,${0.3 + Math.sin(Date.now() * 0.005 + i) * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Animated bars
+      for (let i = 0; i < bars; i++) {
+        const target = (Math.sin(Date.now() * 0.003 + i * 0.5) + 1) / 2 * 0.6 +
+                       (Math.sin(Date.now() * 0.007 + i * 1.2) + 1) / 2 * 0.3 +
+                       Math.random() * 0.1;
+        heights[i] += (target * H * 0.7 - heights[i]) * 0.15;
+
+        const gradient = ctx.createLinearGradient(0, H, 0, H - heights[i]);
+        const col = neonColors[i % neonColors.length];
+        gradient.addColorStop(0, col);
+        gradient.addColorStop(0.5, col + "cc");
+        gradient.addColorStop(1, col + "44");
+
+        ctx.fillStyle = gradient;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = col;
+        ctx.fillRect(i * barWidth + 1, H - heights[i], barWidth - 2, heights[i]);
+
+        // Glow top
+        ctx.fillStyle = col;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = col;
+        ctx.fillRect(i * barWidth + 1, H - heights[i], barWidth - 2, 3);
+      }
+      ctx.shadowBlur = 0;
+
+      // "VEGAS" text shimmer
+      const shimmer = Math.sin(Date.now() * 0.004) * 0.3 + 0.7;
+      ctx.font = "bold 24px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = `rgba(255,215,0,${shimmer})`;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = "#FFD700";
+      ctx.fillText("★ VEGAS VIBES ★", W / 2, 30);
+      ctx.shadowBlur = 0;
+
+      // Drink emoji floating
+      ctx.font = "28px serif";
+      const emojiY = H * 0.35 + Math.sin(Date.now() * 0.003) * 10;
+      ctx.fillText(selectedDrink.emoji, W / 2, emojiY);
+
+      barAnimRef.current = requestAnimationFrame(animate);
+    }
+
+    barAnimRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (barAnimRef.current) cancelAnimationFrame(barAnimRef.current);
+    };
+  }, [barPrompt, selectedDrink.emoji]);
+
+  function closeBar() {
+    setBarPrompt(null);
+    if (barTimerRef.current) clearInterval(barTimerRef.current);
+    if (barAnimRef.current) cancelAnimationFrame(barAnimRef.current);
   }
 
   // AFK idle detection
@@ -241,6 +381,10 @@ export default function IsometricFloor({
         });
         if (zone.gameType === "makemoney") {
           handleMakeMoneyTap();
+          return;
+        }
+        if (zone.gameType === "bar") {
+          handleBarTap();
           return;
         }
         setTablePrompt({ gameType: zone.gameType, label: zone.label });
@@ -415,6 +559,23 @@ export default function IsometricFloor({
               </div>
             );
           })}
+
+        {/* Bar label */}
+        <div
+          className="absolute z-10 pointer-events-none flex flex-col items-center"
+          style={{
+            left: "39%",
+            top: "57%",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <div
+            className="px-2 py-0.5 rounded-full text-[7px] font-bold whitespace-nowrap"
+            style={{ background: "rgba(168,85,247,0.2)", color: "#C084FC" }}
+          >
+            <Wine size={8} className="inline -mt-px" /> The Bar  · $1
+          </div>
+        </div>
 
         {/* Make Money character */}
         <div
@@ -734,6 +895,135 @@ export default function IsometricFloor({
                     }}
                   >
                     Nice!
+                  </motion.button>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bar Modal */}
+      <AnimatePresence>
+        {barPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.8)" }}
+            onClick={(e) => { e.stopPropagation(); if (barPrompt === "menu") closeBar(); }}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="rounded-2xl p-5 text-center max-w-sm w-full mx-4"
+              style={{
+                background: "linear-gradient(135deg, #111118, #0d0d15)",
+                border: "1px solid #2a2a3a",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Menu */}
+              {barPrompt === "menu" && (
+                <>
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                    style={{ background: "rgba(168,85,247,0.15)" }}
+                  >
+                    <Wine size={28} className="text-purple-400" />
+                  </div>
+                  <div className="text-white text-lg font-bold mb-1">The Bar</div>
+                  <div className="text-[#666] text-xs mb-4">
+                    Grab a drink for $1 and vibe out
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    {DRINKS.map((drink) => (
+                      <motion.button
+                        key={drink.name}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.92 }}
+                        onClick={() => orderDrink(drink)}
+                        className="flex flex-col items-center gap-1 p-3 rounded-xl"
+                        style={{
+                          background: `${drink.color}15`,
+                          border: `1px solid ${drink.color}33`,
+                        }}
+                      >
+                        <span className="text-2xl">{drink.emoji}</span>
+                        <span className="text-[9px] text-white/70 font-medium">{drink.name}</span>
+                        <span className="text-[8px] font-mono" style={{ color: drink.color }}>$1</span>
+                      </motion.button>
+                    ))}
+                  </div>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={closeBar}
+                    className="px-5 py-2 rounded-xl text-sm font-medium text-white/50"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    Leave Bar
+                  </motion.button>
+                </>
+              )}
+
+              {/* Drinking — Visualizer */}
+              {barPrompt === "drinking" && (
+                <>
+                  <div className="mb-2">
+                    <canvas
+                      ref={barCanvasRef}
+                      width={320}
+                      height={200}
+                      className="w-full rounded-xl"
+                      style={{ imageRendering: "auto" }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <span className="text-xl">{selectedDrink.emoji}</span>
+                    <span className="text-white text-sm font-bold">{selectedDrink.name}</span>
+                  </div>
+
+                  <div className="text-white/40 text-[10px] mb-2">
+                    Sit back and enjoy the vibes
+                  </div>
+
+                  {/* Timer ring */}
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <div className="relative w-12 h-12">
+                      <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="#1a1a2e" strokeWidth="3" />
+                        <circle
+                          cx="24" cy="24" r="20" fill="none"
+                          stroke={selectedDrink.color}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 20}`}
+                          strokeDashoffset={`${2 * Math.PI * 20 * (1 - barTimer / 30)}`}
+                          style={{ transition: "stroke-dashoffset 1s linear" }}
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-white font-mono text-sm font-bold">
+                        {barTimer}
+                      </span>
+                    </div>
+                  </div>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={closeBar}
+                    className="px-5 py-2 rounded-xl text-sm font-medium text-white/50"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    Leave Bar
                   </motion.button>
                 </>
               )}
