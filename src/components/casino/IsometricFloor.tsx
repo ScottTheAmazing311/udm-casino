@@ -165,6 +165,7 @@ export default function IsometricFloor({
     });
     setBarPrompt("drinking");
     setBarTimer(30);
+    playMusic("/Low Stakes, High Roll.mp3");
 
     barTimerRef.current = setInterval(() => {
       setBarTimer((prev) => {
@@ -270,6 +271,7 @@ export default function IsometricFloor({
     setBarPrompt(null);
     if (barTimerRef.current) clearInterval(barTimerRef.current);
     if (barAnimRef.current) cancelAnimationFrame(barAnimRef.current);
+    playMusic("/pixel-jackpot.mp3");
   }
 
   // AFK idle detection

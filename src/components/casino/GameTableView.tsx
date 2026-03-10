@@ -38,6 +38,8 @@ function getPlayerColor(id: number): string {
 
 const GAME_MUSIC: Record<string, string> = {
   blackjack: "/backroom-shuffle.mp3",
+  roulette: "/Velvet Chips & Silver Coins.mp3",
+  craps: "/Pixel High Rollers.mp3",
 };
 
 export default function GameTableView({
