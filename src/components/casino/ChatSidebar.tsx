@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, ChevronDown, Send, X } from "lucide-react";
+import { MessageCircle, ChevronDown, Send } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { PLAYERS } from "@/lib/constants";
