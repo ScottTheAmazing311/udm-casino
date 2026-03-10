@@ -27,7 +27,7 @@ function getPlayerColor(id: number): string {
   return PLAYERS.find((p) => p.id === id)?.color || "#666";
 }
 
-const BET_AMOUNTS = [10, 25, 50, 100, 250, 500];
+const BET_AMOUNTS = [1, 10, 25, 50, 100, 250, 500];
 const SYMBOL_COUNT = SLOT_SYMBOLS.length;
 const PANEL_ANGLE = 360 / SYMBOL_COUNT;
 

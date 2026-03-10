@@ -34,7 +34,7 @@ for (let row = 0; row < 12; row++) {
   BOARD_NUMBERS.push([row * 3 + 1, row * 3 + 2, row * 3 + 3]);
 }
 
-const BET_CHIPS = [10, 25, 50, 100, 250];
+const BET_CHIPS = [1, 10, 25, 50, 100, 250];
 
 type BetTarget = {
   type: string;
