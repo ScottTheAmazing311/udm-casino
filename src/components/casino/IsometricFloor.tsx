@@ -682,11 +682,11 @@ export default function IsometricFloor({
                 {tablePrompt.label}
               </div>
               <div className="text-[#666] text-xs mb-5">
-                {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots" || tablePrompt.gameType === "poker"
+                {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots" || tablePrompt.gameType === "poker" || tablePrompt.gameType === "craps"
                   ? `${seatedCount(tablePrompt.gameType)} players seated`
                   : "Coming Soon"}
               </div>
-              {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots" || tablePrompt.gameType === "poker" ? (
+              {tablePrompt.gameType === "blackjack" || tablePrompt.gameType === "roulette" || tablePrompt.gameType === "slots" || tablePrompt.gameType === "poker" || tablePrompt.gameType === "craps" ? (
                 <div className="flex gap-2 justify-center">
                   <motion.button
                     whileHover={{ scale: 1.05 }}

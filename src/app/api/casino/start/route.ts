@@ -67,6 +67,18 @@ export async function POST(request: Request) {
         turnOrder,
         currentSpinnerIndex: 0,
       }
+    : table.game_type === "craps"
+    ? {
+        phase: "betting",
+        bets: {},
+        readyPlayers: [],
+        dice: null,
+        point: null,
+        shooterIndex: 0,
+        results: null,
+        turnOrder,
+        rollHistory: [],
+      }
     : table.game_type === "poker"
     ? {
         deck: [],

@@ -29,14 +29,31 @@ export interface PokerHandEval {
   name: string;
 }
 
+export type CrapsBetType = "pass" | "dontpass" | "field" | "come" | "dontcome" | "place6" | "place8";
+
 export interface CrapsBet {
-  type: "pass" | "dontpass" | "field";
+  type: CrapsBetType;
   amount: number;
+  comePoint?: number; // for come/dontcome bets that have established a point
 }
 
 export interface CrapsResult {
   result: string;
   amount: number;
+}
+
+export type CrapsPhase = "betting" | "come-out" | "point" | "resolving";
+
+export interface CrapsGameState {
+  phase: CrapsPhase;
+  bets: Record<number, CrapsBet[]>;
+  readyPlayers: number[];
+  dice: [number, number] | null;
+  point: number | null;
+  shooterIndex: number;
+  results: Record<number, CrapsResult> | null;
+  turnOrder: number[];
+  rollHistory: { dice: [number, number]; sum: number }[];
 }
 
 export interface PokerWinner {

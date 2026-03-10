@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { createDeck, handValue } from "@/lib/game-logic";
-import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState, SlotsGameState, PokerGameState } from "@/lib/types";
+import { BlackjackGameState, HandState, BlackjackResult, RouletteGameState, SlotsGameState, PokerGameState, CrapsGameState, CrapsBetType } from "@/lib/types";
 import { spinWheel, resolveAllBets, RouletteBet } from "@/lib/roulette-logic";
 import { spin as spinSlots } from "@/lib/slots-logic";
 import { dealHoleCards, findNextActivePlayer, getActivePlayers, isRoundComplete, advancePhase, resolveShowdown } from "@/lib/poker-logic";
+import { rollDice, resolveRoll } from "@/lib/craps-logic";
 
 export async function POST(request: Request) {
   const { tableId, playerId, action, payload } = await request.json();
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
 
   if (session.game_type === "poker") {
     return handlePokerAction(session, tableId, playerId, action, payload, supabase);
+  }
+
+  if (session.game_type === "craps") {
+    return handleCrapsAction(session, tableId, playerId, action, payload, supabase);
   }
 
   return handleBlackjackAction(session, tableId, playerId, action, payload, supabase);
@@ -1168,4 +1173,213 @@ async function handlePokerAction(
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+}
+
+// ═══════════════════════════════════════════════════
+// CRAPS
+// ═══════════════════════════════════════════════════
+
+async function handleCrapsAction(
+  session: Record<string, unknown>,
+  tableId: string,
+  playerId: number,
+  action: string,
+  payload: Record<string, unknown> | undefined,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const state = session.game_state as CrapsGameState;
+  let status = session.status as string;
+  const newVersion = (session.version as number) + 1;
+
+  // ── PLACE BET ────────────────────────
+  if (action === "place-bet") {
+    if (status !== "betting") {
+      return NextResponse.json({ error: "Not in betting phase" }, { status: 400 });
+    }
+
+    const betType = payload?.betType as CrapsBetType;
+    const amount = payload?.amount as number;
+
+    if (!betType || !amount || amount <= 0) {
+      return NextResponse.json({ error: "Invalid bet" }, { status: 400 });
+    }
+
+    const { data: player } = await supabase
+      .from("udm_players")
+      .select("chips")
+      .eq("id", playerId)
+      .single();
+
+    const existingBets = state.bets[playerId] || [];
+    const totalBet = existingBets.reduce((sum, b) => sum + b.amount, 0) + amount;
+
+    if (!player || player.chips < totalBet) {
+      return NextResponse.json({ error: "Insufficient chips" }, { status: 400 });
+    }
+
+    if (!state.bets[playerId]) state.bets[playerId] = [];
+    state.bets[playerId].push({ type: betType, amount });
+  }
+
+  // ── CLEAR BETS ───────────────────────
+  else if (action === "clear-bets") {
+    if (status !== "betting") {
+      return NextResponse.json({ error: "Not in betting phase" }, { status: 400 });
+    }
+    state.bets[playerId] = [];
+    state.readyPlayers = state.readyPlayers.filter((pid) => pid !== playerId);
+  }
+
+  // ── READY ────────────────────────────
+  else if (action === "ready") {
+    if (status !== "betting") {
+      return NextResponse.json({ error: "Not in betting phase" }, { status: 400 });
+    }
+    if (!state.bets[playerId] || state.bets[playerId].length === 0) {
+      return NextResponse.json({ error: "Place at least one bet" }, { status: 400 });
+    }
+    if (!state.readyPlayers.includes(playerId)) {
+      state.readyPlayers.push(playerId);
+    }
+
+    // All ready? Move to come-out phase
+    const allReady = state.turnOrder.every((pid) => state.readyPlayers.includes(pid));
+    if (allReady) {
+      state.phase = state.point ? "point" : "come-out";
+      status = "playing";
+    }
+  }
+
+  // ── ROLL ─────────────────────────────
+  else if (action === "roll") {
+    if (status !== "playing") {
+      return NextResponse.json({ error: "Not in playing phase" }, { status: 400 });
+    }
+
+    // Only shooter can roll
+    const shooterId = state.turnOrder[state.shooterIndex];
+    if (playerId !== shooterId) {
+      return NextResponse.json({ error: "Only the shooter can roll" }, { status: 400 });
+    }
+
+    const dice = rollDice();
+    state.dice = dice;
+    state.rollHistory.push({ dice, sum: dice[0] + dice[1] });
+
+    const { results, newPoint, newPhase, description } = resolveRoll(
+      state.bets, dice, state.point, state.phase, state.turnOrder
+    );
+
+    state.point = newPoint;
+
+    if (newPhase === "resolving") {
+      // Final resolution — update chips
+      state.results = results;
+      state.phase = "resolving";
+      status = "resolving";
+
+      for (const pid of state.turnOrder) {
+        const result = results[pid];
+        if (result && result.amount !== 0) {
+          await supabase.rpc("update_player_chips", { p_player_id: pid, p_amount: result.amount });
+          await supabase.from("udm_game_results").insert({
+            session_id: session.id,
+            player_id: pid,
+            bet_amount: (state.bets[pid] || []).reduce((s, b) => s + b.amount, 0),
+            payout: result.amount,
+            hand_description: result.result || description,
+          });
+        }
+      }
+    } else if (newPhase === "point") {
+      state.phase = "point";
+      // Field/place bets resolved mid-roll — update chips for those
+      for (const pid of state.turnOrder) {
+        const result = results[pid];
+        if (result && result.amount !== 0) {
+          await supabase.rpc("update_player_chips", { p_player_id: pid, p_amount: result.amount });
+        }
+      }
+      // Store partial results for display
+      state.results = results;
+    }
+  }
+
+  // ── CONTINUE (roll again in point phase) ──
+  else if (action === "continue-roll") {
+    // Reset for next roll in point phase
+    state.dice = null;
+    state.results = null;
+    status = "playing";
+    state.phase = "point";
+  }
+
+  // ── NEW ROUND ────────────────────────
+  else if (action === "new-round") {
+    await supabase
+      .from("udm_game_sessions")
+      .update({ status: "complete", completed_at: new Date().toISOString() })
+      .eq("id", session.id);
+
+    const { data: seats } = await supabase
+      .from("udm_casino_seats")
+      .select("*")
+      .eq("table_id", tableId)
+      .order("seat_number");
+
+    if (!seats || seats.length === 0) {
+      return NextResponse.json({ error: "No players seated" }, { status: 400 });
+    }
+
+    const turnOrder = seats.map((s) => s.player_id);
+
+    // Rotate shooter
+    const newShooterIndex = (state.shooterIndex + 1) % turnOrder.length;
+
+    const newState: CrapsGameState = {
+      phase: "betting",
+      bets: {},
+      readyPlayers: [],
+      dice: null,
+      point: null,
+      shooterIndex: newShooterIndex,
+      results: null,
+      turnOrder,
+      rollHistory: [],
+    };
+
+    const { data: newSession, error: newErr } = await supabase
+      .from("udm_game_sessions")
+      .insert({
+        table_id: tableId,
+        game_type: "craps",
+        status: "betting",
+        game_state: newState,
+        current_turn_player_id: turnOrder[newShooterIndex],
+        round_number: (session.round_number as number) + 1,
+      })
+      .select()
+      .single();
+
+    if (newErr) return NextResponse.json({ error: newErr.message }, { status: 500 });
+    return NextResponse.json({ success: true, session: newSession });
+  }
+
+  else {
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  }
+
+  // Save state
+  const { error: updateErr } = await supabase
+    .from("udm_game_sessions")
+    .update({
+      status,
+      game_state: state,
+      current_turn_player_id: state.turnOrder[state.shooterIndex],
+      version: newVersion,
+    })
+    .eq("id", session.id);
+
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  return NextResponse.json({ success: true, status, state, version: newVersion });
 }

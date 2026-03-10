@@ -18,6 +18,7 @@ import ColbyTrainer from "@/components/games/ColbyTrainer";
 import RouletteTableView from "./RouletteTableView";
 import SlotsTableView from "./SlotsTableView";
 import PokerTableView from "./PokerTableView";
+import CrapsTableView from "./CrapsTableView";
 import PlayerChipsSidebar from "./PlayerChipsSidebar";
 import ChatSidebar from "./ChatSidebar";
 
@@ -74,6 +75,17 @@ export default function GameTableView({
     return (
       <>
         <PokerTableView table={table} playerId={playerId} onLeave={onLeave} />
+        <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
+        <PlayerChipsSidebar currentPlayerId={playerId} />
+      </>
+    );
+  }
+
+  // Dispatch to craps view
+  if (table.game_type === "craps") {
+    return (
+      <>
+        <CrapsTableView table={table} playerId={playerId} onLeave={onLeave} />
         <ChatSidebar playerId={playerId} playerName={pName} chatContext={table.id} />
         <PlayerChipsSidebar currentPlayerId={playerId} />
       </>
