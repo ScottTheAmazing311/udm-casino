@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Users, Dice5 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { PLAYERS } from "@/lib/constants";
 import { HEADSHOTS } from "@/lib/headshots";
@@ -37,9 +37,130 @@ const BET_OPTIONS: { type: CrapsBetType; label: string; desc: string; color: str
 
 const BET_AMOUNTS = [5, 10, 25, 50, 100];
 
-const DICE_FACES: Record<number, string> = {
-  1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅",
-};
+// ─── DICE DOT COMPONENT ──────────────────
+function DiceFace({ value, size = 64 }: { value: number; size?: number }) {
+  const dotSize = size * 0.16;
+  const pad = size * 0.22;
+  const mid = size / 2;
+
+  const dotPositions: Record<number, [number, number][]> = {
+    1: [[mid, mid]],
+    2: [[pad, size - pad], [size - pad, pad]],
+    3: [[pad, size - pad], [mid, mid], [size - pad, pad]],
+    4: [[pad, pad], [pad, size - pad], [size - pad, pad], [size - pad, size - pad]],
+    5: [[pad, pad], [pad, size - pad], [mid, mid], [size - pad, pad], [size - pad, size - pad]],
+    6: [[pad, pad], [pad, mid], [pad, size - pad], [size - pad, pad], [size - pad, mid], [size - pad, size - pad]],
+  };
+
+  return (
+    <div
+      className="relative rounded-xl"
+      style={{
+        width: size,
+        height: size,
+        background: "linear-gradient(145deg, #f5f5f5, #d4d4d4)",
+        boxShadow: "0 6px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 4px rgba(0,0,0,0.1)",
+        border: "1px solid rgba(0,0,0,0.15)",
+      }}
+    >
+      {dotPositions[value]?.map(([x, y], i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            width: dotSize,
+            height: dotSize,
+            left: x - dotSize / 2,
+            top: y - dotSize / 2,
+            background: "radial-gradient(circle at 35% 35%, #444, #111)",
+            boxShadow: "inset 0 1px 2px rgba(0,0,0,0.5)",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── ROLLING DICE ANIMATION ───────────────
+function RollingDice({ dice, onComplete }: { dice: [number, number]; onComplete: () => void }) {
+  const [rolling, setRolling] = useState(true);
+  const [displayValues, setDisplayValues] = useState<[number, number]>([1, 1]);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    let count = 0;
+    intervalRef.current = setInterval(() => {
+      setDisplayValues([
+        Math.floor(Math.random() * 6) + 1,
+        Math.floor(Math.random() * 6) + 1,
+      ]);
+      count++;
+      if (count >= 12) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setDisplayValues(dice);
+        setRolling(false);
+        setTimeout(onComplete, 600);
+      }
+    }, 80);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dice[0], dice[1]]);
+
+  return (
+    <div className="flex gap-5 justify-center">
+      {displayValues.map((d, i) => (
+        <motion.div
+          key={i}
+          animate={rolling ? {
+            rotate: [0, 15, -15, 10, -10, 5, 0],
+            y: [0, -20, 0, -10, 0, -5, 0],
+          } : { rotate: 0, y: 0 }}
+          transition={rolling ? {
+            duration: 0.4,
+            repeat: Infinity,
+            delay: i * 0.1,
+          } : { type: "spring", stiffness: 300 }}
+        >
+          <DiceFace value={d} size={72} />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ─── ON/OFF PUCK ──────────────────────────
+function PointPuck({ point }: { point: number | null }) {
+  return (
+    <motion.div
+      initial={{ scale: 0 }}
+      animate={{ scale: 1 }}
+      className="flex items-center justify-center"
+    >
+      <div
+        className="w-14 h-14 rounded-full flex flex-col items-center justify-center font-bold border-2"
+        style={{
+          background: point
+            ? "linear-gradient(135deg, #fff, #e8e8e8)"
+            : "linear-gradient(135deg, #222, #111)",
+          borderColor: point ? "#333" : "#555",
+          boxShadow: point
+            ? "0 4px 16px rgba(255,255,255,0.2), inset 0 -2px 4px rgba(0,0,0,0.1)"
+            : "0 4px 16px rgba(0,0,0,0.4)",
+        }}
+      >
+        <span
+          className="text-[9px] uppercase tracking-wider"
+          style={{ color: point ? "#000" : "#666" }}
+        >
+          {point ? "ON" : "OFF"}
+        </span>
+        {point && (
+          <span className="text-lg font-mono font-black text-black leading-none">{point}</span>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 export default function CrapsTableView({
   table,
@@ -50,6 +171,8 @@ export default function CrapsTableView({
     useGameSession(table.id, playerId);
   const [selectedBetType, setSelectedBetType] = useState<CrapsBetType>("pass");
   const [selectedChip, setSelectedChip] = useState(25);
+  const [rollComplete, setRollComplete] = useState(false);
+  const [rollKey, setRollKey] = useState(0);
 
   const handleLeave = async () => {
     await leaveTable();
@@ -62,6 +185,14 @@ export default function CrapsTableView({
   const myBets = state?.bets?.[playerId] || [];
   const myTotalBet = myBets.reduce((s, b) => s + b.amount, 0);
   const isReady = state?.readyPlayers?.includes(playerId) || false;
+
+  // Reset roll animation state when dice change
+  useEffect(() => {
+    if (state?.dice) {
+      setRollComplete(false);
+      setRollKey((k) => k + 1);
+    }
+  }, [state?.dice?.[0], state?.dice?.[1]]);
 
   if (loading) {
     return (
@@ -160,7 +291,6 @@ export default function CrapsTableView({
     const otherPlayers = state.turnOrder.filter((pid) => pid !== playerId);
     const shooterName = getPlayerName(state.turnOrder[state.shooterIndex]);
 
-    // Aggregate bets per cell for all players
     const cellBets: Record<string, { playerId: number; amount: number }[]> = {};
     if (state.bets) {
       for (const [pid, bets] of Object.entries(state.bets)) {
@@ -201,7 +331,7 @@ export default function CrapsTableView({
           ))}
         </div>
       );
-    }
+    };
 
     return (
       <div className="min-h-screen bg-[#060610] relative overflow-hidden flex flex-col">
@@ -210,19 +340,15 @@ export default function CrapsTableView({
 
         <div className="relative z-10 flex-1 overflow-auto px-2 py-2">
           <div className="max-w-[380px] mx-auto">
-            {/* Shooter & point indicator */}
-            <div className="flex items-center justify-center gap-3 mb-3">
+            {/* Shooter & ON/OFF puck */}
+            <div className="flex items-center justify-center gap-4 mb-3">
               <div className="flex items-center gap-1.5">
                 <Dice5 size={12} className="text-casino-gold" />
                 <span className="text-white/60 text-[10px]">
                   Shooter: <span className="text-casino-gold font-bold">{isShooter ? "You" : shooterName}</span>
                 </span>
               </div>
-              {state.point && (
-                <div className="px-2.5 py-0.5 rounded-full bg-casino-gold/20">
-                  <span className="text-casino-gold text-[10px] font-mono font-bold">Point: {state.point}</span>
-                </div>
-              )}
+              <PointPuck point={state.point} />
             </div>
 
             {/* Other players status */}
@@ -307,7 +433,7 @@ export default function CrapsTableView({
                 {renderChipsOnCell("come")}
               </motion.button>
 
-              {/* Field bet - full width */}
+              {/* Field bet */}
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={() => placeBet("field")}
@@ -457,6 +583,7 @@ export default function CrapsTableView({
   // ─── PLAYING (ROLLING) ──────────────────
   if (status === "playing" && state) {
     const shooterName = getPlayerName(state.turnOrder[state.shooterIndex]);
+    const diceSum = state.dice ? state.dice[0] + state.dice[1] : null;
 
     return (
       <div className="min-h-screen bg-[#060610] relative overflow-hidden flex flex-col">
@@ -464,18 +591,14 @@ export default function CrapsTableView({
         <TopBar table={table} onLeave={handleLeave} />
 
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4">
-          {/* Phase indicator */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm">
-              <span className="text-white/60 text-[10px] uppercase tracking-wider">
+          {/* Phase indicator + ON/OFF puck */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm">
+              <span className="text-white/60 text-[10px] uppercase tracking-wider font-bold">
                 {state.phase === "come-out" ? "Come-Out Roll" : "Point Phase"}
               </span>
             </div>
-            {state.point && (
-              <div className="px-3 py-1 rounded-full bg-casino-gold/20 backdrop-blur-sm">
-                <span className="text-casino-gold text-xs font-mono font-bold">Point: {state.point}</span>
-              </div>
-            )}
+            <PointPuck point={state.point} />
           </div>
 
           {/* Shooter info */}
@@ -486,46 +609,60 @@ export default function CrapsTableView({
             </span>
           </div>
 
-          {/* Dice display */}
-          {state.dice && (
-            <motion.div
-              initial={{ scale: 0, rotate: 180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: "spring", stiffness: 200 }}
-              className="flex gap-4 mb-4"
-            >
-              {state.dice.map((d, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ y: -100, rotate: Math.random() * 360 }}
-                  animate={{ y: 0, rotate: 0 }}
-                  transition={{ delay: i * 0.15, type: "spring", stiffness: 150 }}
-                  className="w-16 h-16 rounded-xl flex items-center justify-center text-4xl"
-                  style={{
-                    background: "linear-gradient(135deg, #fff, #e0e0e0)",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
-                  }}
-                >
-                  {DICE_FACES[d]}
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+          {/* Dice display with rolling animation */}
+          <AnimatePresence mode="wait">
+            {state.dice && (
+              <motion.div
+                key={rollKey}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-4"
+              >
+                <RollingDice
+                  dice={state.dice}
+                  onComplete={() => setRollComplete(true)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Sum */}
-          {state.dice && (
+          {/* Sum display */}
+          {state.dice && rollComplete && (
             <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="text-casino-gold font-mono text-3xl font-bold mb-4"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 400 }}
+              className="mb-4"
             >
-              {state.dice[0] + state.dice[1]}
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center font-mono text-2xl font-black"
+                style={{
+                  background: diceSum === 7 && state.phase === "point"
+                    ? "linear-gradient(135deg, #EF4444, #DC2626)"
+                    : diceSum === 7 || diceSum === 11
+                    ? "linear-gradient(135deg, #4ADE80, #22C55E)"
+                    : diceSum === state.point
+                    ? "linear-gradient(135deg, #FFD700, #FFA500)"
+                    : "linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))",
+                  color: diceSum === 7 && state.phase === "point" ? "#fff"
+                    : diceSum === 7 || diceSum === 11 ? "#fff"
+                    : diceSum === state.point ? "#000"
+                    : "#fff",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+                }}
+              >
+                {diceSum}
+              </div>
             </motion.div>
           )}
 
           {/* Mid-roll results */}
-          {state.results && state.phase === "point" && (
-            <div className="mb-4">
+          {state.results && rollComplete && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 w-full max-w-xs"
+            >
               {state.turnOrder.map((pid) => {
                 const r = state.results?.[pid];
                 if (!r || (!r.result && r.amount === 0)) return null;
@@ -538,10 +675,10 @@ export default function CrapsTableView({
                   </div>
                 );
               })}
-            </div>
+            </motion.div>
           )}
 
-          {/* Roll button (shooter only) or continue */}
+          {/* Roll button (shooter only) */}
           {!state.dice && isShooter && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -554,11 +691,12 @@ export default function CrapsTableView({
                 boxShadow: "0 8px 30px rgba(239,68,68,0.4)",
               }}
             >
-              🎲 Roll the Dice
+              Roll the Dice
             </motion.button>
           )}
 
-          {state.dice && state.phase === "point" && isShooter && (
+          {/* Continue rolling in point phase */}
+          {state.dice && rollComplete && state.phase === "point" && isShooter && (
             <motion.button
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -571,7 +709,7 @@ export default function CrapsTableView({
                 boxShadow: "0 8px 30px rgba(239,68,68,0.3)",
               }}
             >
-              🎲 Roll Again
+              Roll Again
             </motion.button>
           )}
 
@@ -579,19 +717,35 @@ export default function CrapsTableView({
             <div className="text-white/40 text-sm">Waiting for {shooterName} to roll...</div>
           )}
 
+          {!isShooter && state.dice && !rollComplete && (
+            <div className="text-white/40 text-sm mt-2 animate-pulse">Rolling...</div>
+          )}
+
           {/* Roll history */}
           {state.rollHistory.length > 0 && (
             <div className="mt-6">
-              <div className="text-white/30 text-[8px] uppercase tracking-wider mb-1 text-center">Roll History</div>
+              <div className="text-white/30 text-[8px] uppercase tracking-wider mb-1.5 text-center">Roll History</div>
               <div className="flex gap-1.5 justify-center flex-wrap">
-                {state.rollHistory.slice(-10).map((roll, i) => (
+                {state.rollHistory.slice(-12).map((roll, i) => (
                   <div
                     key={i}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-mono font-bold"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono font-bold"
                     style={{
-                      background: roll.sum === 7 ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)",
-                      color: roll.sum === 7 ? "#FF6B6B" : "#fff",
-                      border: `1px solid ${roll.sum === 7 ? "#FF6B6B33" : "rgba(255,255,255,0.1)"}`,
+                      background: roll.sum === 7
+                        ? "rgba(239,68,68,0.25)"
+                        : roll.sum === state.point
+                        ? "rgba(255,215,0,0.25)"
+                        : "rgba(255,255,255,0.08)",
+                      color: roll.sum === 7
+                        ? "#FF6B6B"
+                        : roll.sum === state.point
+                        ? "#FFD700"
+                        : "#fff",
+                      border: `1px solid ${
+                        roll.sum === 7 ? "#FF6B6B44"
+                        : roll.sum === state.point ? "#FFD70044"
+                        : "rgba(255,255,255,0.1)"
+                      }`,
                     }}
                   >
                     {roll.sum}
@@ -609,33 +763,44 @@ export default function CrapsTableView({
 
   // ─── RESOLVING ──────────────────────────
   if (status === "resolving" && state) {
+    const diceSum = state.dice ? state.dice[0] + state.dice[1] : null;
+    const sevenOut = diceSum === 7 && state.phase !== "come-out";
+
     return (
       <div className="min-h-screen bg-[#060610] relative overflow-hidden flex flex-col">
         <TableBg />
         <TopBar table={table} onLeave={handleLeave} />
 
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4">
+          {/* Result banner */}
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="mb-4 px-6 py-2 rounded-full"
+            style={{
+              background: sevenOut
+                ? "linear-gradient(135deg, rgba(239,68,68,0.3), rgba(239,68,68,0.1))"
+                : "linear-gradient(135deg, rgba(74,222,128,0.3), rgba(74,222,128,0.1))",
+              border: `1px solid ${sevenOut ? "#EF444444" : "#4ADE8044"}`,
+            }}
+          >
+            <span className="text-sm font-bold" style={{ color: sevenOut ? "#FF6B6B" : "#4ADE80" }}>
+              {sevenOut ? "Seven Out!" : diceSum === 7 ? "Natural 7!" : diceSum === 11 ? "Yo 11!" : diceSum === 2 ? "Snake Eyes!" : diceSum === 3 ? "Ace Deuce!" : diceSum === 12 ? "Boxcars!" : `Hit the Point ${state.point || ""}!`}
+            </span>
+          </motion.div>
+
           {/* Dice result */}
           {state.dice && (
-            <div className="flex gap-4 mb-3">
+            <div className="flex gap-5 mb-3">
               {state.dice.map((d, i) => (
-                <div
-                  key={i}
-                  className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl"
-                  style={{
-                    background: "linear-gradient(135deg, #fff, #e0e0e0)",
-                    boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
-                  }}
-                >
-                  {DICE_FACES[d]}
-                </div>
+                <DiceFace key={i} value={d} size={60} />
               ))}
             </div>
           )}
 
-          {state.dice && (
+          {diceSum && (
             <div className="text-casino-gold font-mono text-2xl font-bold mb-4">
-              {state.dice[0] + state.dice[1]}
+              {diceSum}
             </div>
           )}
 

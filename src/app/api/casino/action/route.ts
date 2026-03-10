@@ -1333,8 +1333,12 @@ async function handleCrapsAction(
 
     const turnOrder = seats.map((s) => s.player_id);
 
-    // Rotate shooter
-    const newShooterIndex = (state.shooterIndex + 1) % turnOrder.length;
+    // Only rotate shooter on seven-out (dice sum was 7 during point phase)
+    const lastDiceSum = state.dice ? state.dice[0] + state.dice[1] : 0;
+    const wasSevenOut = lastDiceSum === 7 && state.point !== null;
+    const newShooterIndex = wasSevenOut
+      ? (state.shooterIndex + 1) % turnOrder.length
+      : state.shooterIndex % turnOrder.length;
 
     const newState: CrapsGameState = {
       phase: "betting",
@@ -1345,7 +1349,7 @@ async function handleCrapsAction(
       shooterIndex: newShooterIndex,
       results: null,
       turnOrder,
-      rollHistory: [],
+      rollHistory: state.rollHistory || [],
     };
 
     const { data: newSession, error: newErr } = await supabase
