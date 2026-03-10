@@ -6,10 +6,9 @@ import { useState } from "react";
 import { Player } from "@/lib/types";
 import { PLAYERS } from "@/lib/constants";
 import { handValue } from "@/lib/game-logic";
-import { AvatarConfig, getRandomAvatar } from "@/lib/avatar";
 import { useMultiplayerTable } from "@/lib/useMultiplayerTable";
 import Card from "@/components/ui/Card";
-import AvatarSVG from "@/components/ui/AvatarSVG";
+import PlayerAvatar from "@/components/ui/PlayerAvatar";
 import ChipStack from "@/components/ui/ChipStack";
 import GameButton from "@/components/ui/GameButton";
 import ColbyTrainer from "./ColbyTrainer";
@@ -19,7 +18,6 @@ interface MultiplayerBlackjackProps {
   joinCode: string;
   playerId: number;
   isHost: boolean;
-  avatars: Record<number, AvatarConfig>;
   goBack: () => void;
 }
 
@@ -32,7 +30,6 @@ export default function MultiplayerBlackjack({
   joinCode,
   playerId,
   isHost,
-  avatars,
   goBack,
 }: MultiplayerBlackjackProps) {
   const { seats, gameState, loading, error, sendAction } = useMultiplayerTable(tableId, playerId);
@@ -43,10 +40,6 @@ export default function MultiplayerBlackjack({
     navigator.clipboard.writeText(joinCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getAvatar = (pid: number): AvatarConfig => {
-    return avatars[pid] || getRandomAvatar(getPlayer(pid).color);
   };
 
   const getSeatChips = (pid: number): number => {
@@ -133,7 +126,7 @@ export default function MultiplayerBlackjack({
                     border: `1px solid ${p.color}22`,
                   }}
                 >
-                  <AvatarSVG config={getAvatar(seat.player_id)} size={36} />
+                  <PlayerAvatar playerId={seat.player_id} size={36} color={p.color} />
                   <div className="flex-1">
                     <div className="text-white text-sm font-semibold">
                       {seat.player_name}
@@ -223,7 +216,7 @@ export default function MultiplayerBlackjack({
                   className="flex items-center gap-3 rounded-xl p-2.5"
                   style={{ background: "#111118", border: "1px solid #222" }}
                 >
-                  <AvatarSVG config={getAvatar(pid)} size={28} />
+                  <PlayerAvatar playerId={pid} size={28} color={p.color} />
                   <span className="text-white text-sm flex-1">{p.name}</span>
                   {hasBetted ? (
                     <span className="text-casino-green text-[11px] font-semibold">Ready</span>
@@ -282,7 +275,7 @@ export default function MultiplayerBlackjack({
             }}
           >
             <div className="flex items-center gap-2.5 mb-3">
-              <AvatarSVG config={getAvatar(playerId)} size={32} />
+              <PlayerAvatar playerId={playerId} size={32} color={getPlayer(playerId).color} active={isMyTurn} />
               <div className="flex-1">
                 <div className="text-white text-sm font-semibold">
                   You {isMyTurn && <span className="text-casino-gold text-[10px]">YOUR TURN</span>}
@@ -372,7 +365,7 @@ export default function MultiplayerBlackjack({
                   }}
                 >
                   <div className="flex items-center gap-2.5">
-                    <AvatarSVG config={getAvatar(pid)} size={28} />
+                    <PlayerAvatar playerId={pid} size={28} color={p.color} active={isActive} />
                     <span className="text-white text-sm font-semibold flex-1">
                       {p.name}
                       {isActive && <span className="text-[#888] text-[10px] ml-2">playing...</span>}

@@ -80,7 +80,7 @@ export default function ColbyTrainer({
               {/* Header */}
               <div className="flex items-center gap-3 mb-3">
                 <div
-                  className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0"
+                  className="w-16 rounded-xl overflow-hidden flex-shrink-0"
                   style={{
                     border: "2px solid #34D399",
                     boxShadow: "0 0 12px rgba(52,211,153,0.2)",
@@ -89,9 +89,9 @@ export default function ColbyTrainer({
                   <Image
                     src="/colby.png"
                     alt="Colby Massa"
-                    width={40}
-                    height={40}
-                    className="object-cover w-full h-full"
+                    width={64}
+                    height={0}
+                    className="w-full h-auto"
                   />
                 </div>
                 <div className="flex-1">
