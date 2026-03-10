@@ -368,7 +368,7 @@ export default function IsometricFloor({
   avatarPosRef.current = avatarPos;
   const animFrameRef = useRef<number>(0);
   const [nearZone, setNearZone] = useState<typeof TAP_ZONES[number] | null>(null);
-  const lastZoneRef = useRef<string | null>(null);
+
 
   const MOVE_SPEED = 0.5; // percent per frame
 
@@ -413,13 +413,7 @@ export default function IsometricFloor({
           setAvatarPos({ x: newX, y: newY });
           const zone = checkZoneOverlap(newX, newY);
           setNearZone(zone);
-          if (!zone) {
-            setTablePrompt(null);
-            lastZoneRef.current = null;
-          } else if (zone.id !== lastZoneRef.current) {
-            lastZoneRef.current = zone.id;
-            interactWithZone(zone);
-          }
+          if (!zone) setTablePrompt(null);
           resetIdleTimer();
         }
       }
