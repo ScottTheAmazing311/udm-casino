@@ -509,6 +509,23 @@ export default function IsometricFloor({
     onSitDown(table.id);
   }
 
+  // Allow Enter/Space to accept the sit-down prompt
+  useEffect(() => {
+    if (!tablePrompt) return;
+    const isPlayable = ["blackjack", "roulette", "slots", "poker", "craps"].includes(tablePrompt.gameType);
+    if (!isPlayable) return;
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleSitDown();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tablePrompt]);
+
   function seatedCount(gameType: string) {
     const table = casinoTables.find((t) => t.game_type === gameType);
     if (!table) return 0;

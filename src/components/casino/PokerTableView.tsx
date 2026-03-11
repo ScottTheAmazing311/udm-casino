@@ -115,81 +115,85 @@ export default function PokerTableView({
   // ─── WAITING / LOBBY ────────────────────
   if (!session || status === "waiting") {
     return (
-      <div className="min-h-screen bg-[#060610] relative overflow-hidden">
+      <div className="min-h-screen bg-[#060610] relative overflow-hidden flex flex-col">
         <TableBg />
-        <div className="relative z-10 p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <button
-              onClick={handleLeave}
-              className="w-9 h-9 rounded-xl flex items-center justify-center bg-black/40 border border-white/10 backdrop-blur-sm"
-            >
-              <ArrowLeft size={16} className="text-white/60" />
-            </button>
-            <div>
-              <h2 className="text-xl font-display text-white drop-shadow-lg">{table.table_name}</h2>
-              <div className="text-white/40 text-[10px] font-mono">Blinds: ${Math.floor((table.min_bet || 10) / 2)}/${table.min_bet || 10}</div>
-            </div>
+        <div className="relative z-10 flex items-center gap-3 px-4 py-3"
+          style={{ background: "rgba(6,6,16,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          <button
+            onClick={handleLeave}
+            className="w-9 h-9 rounded-xl flex items-center justify-center bg-black/40 border border-white/10 backdrop-blur-sm"
+          >
+            <ArrowLeft size={16} className="text-white/60" />
+          </button>
+          <div>
+            <h2 className="text-xl font-display text-white drop-shadow-lg">{table.table_name}</h2>
+            <div className="text-white/40 text-[10px] font-mono">Blinds: ${Math.floor((table.min_bet || 10) / 2)}/${table.min_bet || 10}</div>
+          </div>
+          <div className="flex-1" />
+          <MusicButton />
+        </div>
+
+        <div className="relative z-10 flex-1" />
+
+        <div className="relative z-10 pb-8 px-4"
+          style={{ background: "linear-gradient(0deg, rgba(6,6,16,0.95) 40%, transparent)" }}
+        >
+          <div className="flex justify-center gap-4 flex-wrap mb-4">
+            {Array.from({ length: Math.min(table.max_seats, 8) }).map((_, i) => {
+              const seat = seats.find((s) => s.seat_number === i + 1);
+              const isMe = seat?.player_id === playerId;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex flex-col items-center gap-1"
+                >
+                  {seat ? (
+                    <>
+                      <div
+                        className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-lg"
+                        style={{ borderColor: isMe ? "#FFD700" : getPlayerColor(seat.player_id) }}
+                      >
+                        <Image
+                          src={HEADSHOTS[seat.player_id] || ""}
+                          alt={getPlayerName(seat.player_id)}
+                          width={44} height={44}
+                          className="object-cover w-full h-full"
+                        />
+                      </div>
+                      <span className="text-[9px] text-white font-medium drop-shadow-md">
+                        {isMe ? "You" : getPlayerName(seat.player_id)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-11 h-11 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                        <div className="w-2 h-2 rounded-full bg-white/20" />
+                      </div>
+                      <span className="text-[9px] text-white/30">Empty</span>
+                    </>
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
 
-          <div className="relative mx-auto mb-8" style={{ maxWidth: 600 }}>
-            <div className="pt-32 pb-6">
-              <div className="flex justify-center gap-4 flex-wrap">
-                {Array.from({ length: Math.min(table.max_seats, 8) }).map((_, i) => {
-                  const seat = seats.find((s) => s.seat_number === i + 1);
-                  const isMe = seat?.player_id === playerId;
-                  return (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex flex-col items-center gap-1"
-                    >
-                      {seat ? (
-                        <>
-                          <div
-                            className="w-11 h-11 rounded-full overflow-hidden border-2 shadow-lg"
-                            style={{ borderColor: isMe ? "#FFD700" : getPlayerColor(seat.player_id) }}
-                          >
-                            <Image
-                              src={HEADSHOTS[seat.player_id] || ""}
-                              alt={getPlayerName(seat.player_id)}
-                              width={44} height={44}
-                              className="object-cover w-full h-full"
-                            />
-                          </div>
-                          <span className="text-[9px] text-white font-medium drop-shadow-md">
-                            {isMe ? "You" : getPlayerName(seat.player_id)}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-11 h-11 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-                            <div className="w-2 h-2 rounded-full bg-white/20" />
-                          </div>
-                          <span className="text-[9px] text-white/30">Empty</span>
-                        </>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Users size={12} className="text-white/40" />
-              <span className="text-white/40 text-[10px]">
-                {seats.length}/{table.max_seats} seated
-              </span>
-            </div>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Users size={12} className="text-white/40" />
+            <span className="text-white/40 text-[10px]">
+              {seats.length}/{table.max_seats} seated
+            </span>
           </div>
 
           {seats.length >= 2 && seats.some((s) => s.player_id === playerId) && (
-            <GameButton onClick={startGame} color="#FFD700" primary>
-              Start Hand
-            </GameButton>
+            <div className="flex justify-center">
+              <GameButton onClick={startGame} color="#FFD700" primary>
+                Start Hand
+              </GameButton>
+            </div>
           )}
 
           {seats.length === 1 && seats.some((s) => s.player_id === playerId) && (
@@ -635,7 +639,7 @@ function TopBar({ table, onLeave }: { table: CasinoTable; onLeave: () => void })
   return (
     <div
       className="relative z-30 flex items-center gap-3 px-4 py-3"
-      style={{ background: "linear-gradient(180deg, rgba(6,6,16,0.8), transparent)" }}
+      style={{ background: "rgba(6,6,16,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
     >
       <button
         onClick={onLeave}

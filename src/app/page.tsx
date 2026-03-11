@@ -264,16 +264,14 @@ export default function Home() {
   // ─── AT TABLE ────────────────────────
   if (appPhase === "at-table" && activeTable && session) {
     return (
-      <Shell>
-        <GameTableView
-          table={activeTable}
-          playerId={session.playerId}
-          onLeave={() => {
-            setActiveTable(null);
-            setAppPhase("casino-floor");
-          }}
-        />
-      </Shell>
+      <GameTableView
+        table={activeTable}
+        playerId={session.playerId}
+        onLeave={() => {
+          setActiveTable(null);
+          setAppPhase("casino-floor");
+        }}
+      />
     );
   }
 
