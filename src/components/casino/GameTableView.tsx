@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Users, Coins } from "lucide-react";
+import { ArrowLeft, Users, Coins, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { PLAYERS } from "@/lib/constants";
@@ -119,7 +119,7 @@ function BlackjackTableView({
   playerId,
   onLeave,
 }: GameTableViewProps) {
-  const { session, seats, loading, error, sendAction, startGame, leaveTable } =
+  const { session, seats, loading, error, sendAction, startGame, leaveTable, refresh } =
     useGameSession(table.id, playerId);
   const [showTrainer, setShowTrainer] = useState(false);
 
@@ -127,6 +127,12 @@ function BlackjackTableView({
     await leaveTable();
     onLeave();
   };
+
+  const handleRefresh = useCallback(async () => {
+    // Force-complete any stale sessions and re-fetch
+    await sendAction("force-refresh");
+    await refresh();
+  }, [sendAction, refresh]);
 
   const status = session?.status || "waiting";
   const state = session?.game_state as BlackjackGameState | undefined;
@@ -320,7 +326,7 @@ function BlackjackTableView({
         <TableBackground gameType={table.game_type} />
         <div className="relative z-10 flex flex-col min-h-screen">
           {/* Top bar */}
-          <TopBar table={table} onLeave={handleLeave} />
+          <TopBar table={table} onLeave={handleLeave} onRefresh={handleRefresh} />
 
           {/* Table area with other players */}
           <div className="flex-1 flex flex-col items-center justify-center px-4">
@@ -422,7 +428,7 @@ function BlackjackTableView({
         <TableBackground gameType={table.game_type} />
 
         {/* Top bar */}
-        <TopBar table={table} onLeave={handleLeave} />
+        <TopBar table={table} onLeave={handleLeave} onRefresh={handleRefresh} />
 
         {/* Main table area */}
         <div className="relative z-10 flex-1 flex flex-col">
@@ -709,7 +715,8 @@ function TableBackground({ gameType }: { gameType: string }) {
   );
 }
 
-function TopBar({ table, onLeave }: { table: CasinoTable; onLeave: () => void }) {
+function TopBar({ table, onLeave, onRefresh }: { table: CasinoTable; onLeave: () => void; onRefresh?: () => void }) {
+  const [spinning, setSpinning] = useState(false);
   return (
     <div className="relative z-30 flex items-center gap-3 px-4 py-3"
       style={{ background: "linear-gradient(180deg, rgba(6,6,16,0.8), transparent)" }}
@@ -724,6 +731,19 @@ function TopBar({ table, onLeave }: { table: CasinoTable; onLeave: () => void })
         <div className="text-white text-sm font-semibold drop-shadow-lg">{table.table_name}</div>
         <div className="text-white/40 text-[9px] font-mono">${table.min_bet}-${table.max_bet}</div>
       </div>
+      {onRefresh && (
+        <button
+          onClick={() => {
+            setSpinning(true);
+            onRefresh();
+            setTimeout(() => setSpinning(false), 1000);
+          }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-black/40 border border-white/10 backdrop-blur-sm"
+          title="Refresh table"
+        >
+          <RefreshCw size={13} className={`text-white/60 ${spinning ? "animate-spin" : ""}`} />
+        </button>
+      )}
       <MusicButton />
     </div>
   );

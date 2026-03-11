@@ -23,7 +23,38 @@ export async function POST(request: Request) {
     .single();
 
   if (sessionErr || !session) {
+    if (action === "force-refresh" || action === "check-timeout") {
+      return NextResponse.json({ success: true, message: "No active session" });
+    }
     return NextResponse.json({ error: "No active game session" }, { status: 404 });
+  }
+
+  // ── FORCE REFRESH ─────────────────────
+  // Check if session is stale (players have left) and force-complete it
+  if (action === "force-refresh") {
+    const { data: currentSeats } = await supabase
+      .from("udm_casino_seats")
+      .select("player_id")
+      .eq("table_id", tableId);
+
+    const seatedPlayerIds = new Set((currentSeats || []).map((s) => s.player_id));
+    const gameState = session.game_state as Record<string, unknown>;
+    const turnOrder = (gameState.turnOrder as number[]) || [];
+
+    // Check if any players in the game have left
+    const missingPlayers = turnOrder.filter((pid) => !seatedPlayerIds.has(pid));
+
+    if (missingPlayers.length > 0 || seatedPlayerIds.size === 0) {
+      // Force-complete the stale session
+      await supabase
+        .from("udm_game_sessions")
+        .update({ status: "complete", completed_at: new Date().toISOString() })
+        .eq("id", session.id);
+
+      return NextResponse.json({ success: true, message: "Stale session cleared" });
+    }
+
+    return NextResponse.json({ success: true, message: "Session is healthy" });
   }
 
   // Route to game-specific handler
