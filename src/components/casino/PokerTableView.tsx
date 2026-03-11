@@ -508,6 +508,7 @@ function PokerPlayer({
   pid,
   state,
   isActive,
+  isShowdown,
   isDealer,
 }: {
   pid: number;
@@ -518,7 +519,9 @@ function PokerPlayer({
 }) {
   const folded = state.folded[pid];
   const allIn = state.allIn[pid];
-  const holes = state.playerHoles[pid] || [];
+  const rawHoles = state.playerHoles[pid] || [];
+  // Hide other players' cards unless showdown
+  const holes = isShowdown ? rawHoles : rawHoles.map(() => ({ rank: "?", suit: "?", id: "hidden" }));
   const result = state.results?.[pid];
   const color = getPlayerColor(pid);
 
