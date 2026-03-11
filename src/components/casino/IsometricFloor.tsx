@@ -23,20 +23,20 @@ interface IsometricFloorProps {
 
 // Tap zones mapped to actual table positions in CasinoV2.png (percentages of image)
 const TAP_ZONES = [
-  // Poker — top-left, square box
-  { id: "poker", gameType: "poker", label: "Poker", top: 8, left: 5, width: 15, height: 15 },
-  // Blackjack — mid-left, down 15%
+  // Poker — top-left, square box, right 10%
+  { id: "poker", gameType: "poker", label: "Poker", top: 8, left: 15, width: 15, height: 15 },
+  // Blackjack — mid-left
   { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 37, left: 2, width: 17, height: 18 },
-  // Slots — right wall, down 15%
-  { id: "slots", gameType: "slots", label: "Slots", top: 20, left: 78, width: 22, height: 20 },
-  // Craps — center, down 50% (from 32 → 82 is too far, interpreting as +50% of current = ~48)
-  { id: "craps", gameType: "craps", label: "Craps", top: 48, left: 22, width: 22, height: 16 },
-  // Roulette — center-right, down 15%
+  // Slots — right wall, up 5%
+  { id: "slots", gameType: "slots", label: "Slots", top: 15, left: 78, width: 22, height: 20 },
+  // Craps — center, down 10%
+  { id: "craps", gameType: "craps", label: "Craps", top: 58, left: 22, width: 22, height: 16 },
+  // Roulette — center-right
   { id: "roulette", gameType: "roulette", label: "Roulette", top: 43, left: 46, width: 22, height: 18 },
-  // Bar — directly next to poker box (right edge of poker is left:5+width:15=20)
-  { id: "bar", gameType: "bar", label: "The Bar", top: 8, left: 21, width: 14, height: 12 },
-  // Make Money — small square, left-aligned where the image is
-  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 80, left: 5, width: 14, height: 14 },
+  // Bar — right 10%, down 10%
+  { id: "bar", gameType: "bar", label: "The Bar", top: 18, left: 31, width: 14, height: 12 },
+  // Make Money — right 20%
+  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 80, left: 25, width: 14, height: 14 },
 ];
 
 const BOUNDS = { minX: 5, maxX: 95, minY: 16, maxY: 92 };
