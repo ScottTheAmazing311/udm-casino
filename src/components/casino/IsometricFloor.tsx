@@ -23,20 +23,20 @@ interface IsometricFloorProps {
 
 // Tap zones mapped to actual table positions in CasinoV2.png (percentages of image)
 const TAP_ZONES = [
-  // Poker — top-left green table area
-  { id: "poker", gameType: "poker", label: "Poker", top: 8, left: 5, width: 22, height: 18 },
-  // Blackjack — mid-left semicircle table
-  { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 22, left: 2, width: 17, height: 18 },
-  // Slots — slot tournament area on right wall
-  { id: "slots", gameType: "slots", label: "Slots", top: 5, left: 78, width: 22, height: 20 },
-  // Craps — center area
-  { id: "craps", gameType: "craps", label: "Craps", top: 32, left: 22, width: 22, height: 16 },
-  // Roulette — center-right area
-  { id: "roulette", gameType: "roulette", label: "Roulette", top: 28, left: 46, width: 22, height: 18 },
-  // Bar — top-center area
-  { id: "bar", gameType: "bar", label: "The Bar", top: 5, left: 35, width: 20, height: 12 },
-  // Make Money — bottom-center area
-  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 80, left: 30, width: 40, height: 14 },
+  // Poker — top-left, square box
+  { id: "poker", gameType: "poker", label: "Poker", top: 8, left: 5, width: 15, height: 15 },
+  // Blackjack — mid-left, down 15%
+  { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 37, left: 2, width: 17, height: 18 },
+  // Slots — right wall, down 15%
+  { id: "slots", gameType: "slots", label: "Slots", top: 20, left: 78, width: 22, height: 20 },
+  // Craps — center, down 50% (from 32 → 82 is too far, interpreting as +50% of current = ~48)
+  { id: "craps", gameType: "craps", label: "Craps", top: 48, left: 22, width: 22, height: 16 },
+  // Roulette — center-right, down 15%
+  { id: "roulette", gameType: "roulette", label: "Roulette", top: 43, left: 46, width: 22, height: 18 },
+  // Bar — directly next to poker box (right edge of poker is left:5+width:15=20)
+  { id: "bar", gameType: "bar", label: "The Bar", top: 8, left: 21, width: 14, height: 12 },
+  // Make Money — small square, left-aligned where the image is
+  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 80, left: 5, width: 14, height: 14 },
 ];
 
 const BOUNDS = { minX: 5, maxX: 95, minY: 16, maxY: 92 };
