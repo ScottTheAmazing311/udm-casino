@@ -131,7 +131,7 @@ export default function PokerTableView({
             </div>
           </div>
 
-          <div className="relative mx-auto mb-8" style={{ maxWidth: 380 }}>
+          <div className="relative mx-auto mb-8" style={{ maxWidth: 600 }}>
             <div className="pt-32 pb-6">
               <div className="flex justify-center gap-4 flex-wrap">
                 {Array.from({ length: Math.min(table.max_seats, 8) }).map((_, i) => {
@@ -274,7 +274,7 @@ export default function PokerTableView({
           </div>
 
           {/* Other players */}
-          <div className="flex justify-center gap-3 px-4 py-2 flex-wrap">
+          <div className="flex justify-center gap-6 px-6 py-2 flex-wrap">
             {otherPlayers.map((pid) => (
               <PokerPlayer
                 key={pid}
@@ -300,7 +300,7 @@ export default function PokerTableView({
                   animate={{ y: 0, opacity: 1, rotateY: 0 }}
                   transition={{ delay: i * 0.15, type: "spring", stiffness: 200 }}
                 >
-                  <Card card={c} delay={0} small />
+                  <Card card={c} delay={0} />
                 </motion.div>
               ))}
             </div>
@@ -313,7 +313,7 @@ export default function PokerTableView({
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="relative z-20 px-4 pt-3 pb-4"
+            className="relative z-20 px-6 pt-3 pb-4 max-w-2xl mx-auto w-full"
             style={{ background: "linear-gradient(0deg, rgba(6,6,16,0.95) 50%, transparent)" }}
           >
             {/* My status */}
@@ -614,10 +614,10 @@ function TableBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/poker2.png"
+        src="/PokerV2.png"
         alt=""
         fill
-        className="object-cover object-top"
+        className="object-cover object-center"
         priority
       />
       <div

@@ -246,7 +246,7 @@ function BlackjackTableView({
           </div>
 
           {/* Seat spots overlaid on the table image */}
-          <div className="relative mx-auto mb-8" style={{ maxWidth: 380 }}>
+          <div className="relative mx-auto mb-8" style={{ maxWidth: 700 }}>
             {/* Seats positioned over the table felt */}
             <div className="pt-32 pb-6">
               <div className="flex justify-center gap-4">
@@ -437,7 +437,7 @@ function BlackjackTableView({
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center pt-[50vh] pb-1"
+            className="flex flex-col items-center pt-[35vh] pb-1"
           >
             {/* Dealer cards on the felt */}
             <div className="flex gap-1.5 mb-1.5">
@@ -462,7 +462,7 @@ function BlackjackTableView({
             {/* Side players */}
             <div className="relative z-10 flex justify-between h-full px-1 pt-4">
               {/* Left side players */}
-              <div className="flex flex-col gap-3 w-[90px]">
+              <div className="flex flex-col gap-3 w-[140px]">
                 {leftPlayers.map((pid) => (
                   <SidePlayer
                     key={pid}
@@ -480,7 +480,7 @@ function BlackjackTableView({
               <div className="flex-1" />
 
               {/* Right side players */}
-              <div className="flex flex-col gap-3 w-[90px]">
+              <div className="flex flex-col gap-3 w-[140px]">
                 {rightPlayers.map((pid) => (
                   <SidePlayer
                     key={pid}
@@ -685,7 +685,7 @@ function BlackjackTableView({
 
 // Map game types to their background images
 const GAME_BACKGROUNDS: Record<string, string> = {
-  blackjack: "/blackjack2.png",
+  blackjack: "/blackjackV2.png",
   poker: "/poker2.png",
   craps: "/craps-table-bg.png",
   roulette: "/roulette.png",
@@ -693,7 +693,7 @@ const GAME_BACKGROUNDS: Record<string, string> = {
 };
 
 function TableBackground({ gameType }: { gameType: string }) {
-  const bgSrc = GAME_BACKGROUNDS[gameType] || "/blackjack2.png";
+  const bgSrc = GAME_BACKGROUNDS[gameType] || "/blackjackV2.png";
 
   return (
     <div className="absolute inset-0 z-0">
@@ -701,7 +701,7 @@ function TableBackground({ gameType }: { gameType: string }) {
         src={bgSrc}
         alt=""
         fill
-        className="object-cover object-top"
+        className="object-cover object-center"
         priority
       />
       {/* Vignette overlay for readability */}
@@ -844,7 +844,7 @@ function ActionButton({ label, color, onClick }: { label: string; color: string;
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      className="px-6 py-3 rounded-2xl text-sm font-bold uppercase tracking-wider"
+      className="px-8 py-3.5 rounded-2xl text-base font-bold uppercase tracking-wider"
       style={{
         background: `linear-gradient(135deg, ${color}, ${color}cc)`,
         color: "#fff",

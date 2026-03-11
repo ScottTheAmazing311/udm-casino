@@ -368,7 +368,7 @@ export default function CrapsTableView({
         <TopBar table={table} onLeave={handleLeave} />
 
         <div className="relative z-10 flex-1 overflow-auto px-2 py-1">
-          <div className="max-w-[400px] mx-auto">
+          <div className="max-w-3xl mx-auto">
 
             {/* ─── STATUS BAR: Shooter + Phase + Puck ─── */}
             <div className="flex items-center justify-between mb-2 px-1">
@@ -406,315 +406,326 @@ export default function CrapsTableView({
               </div>
             )}
 
-            {/* ─── DICE AREA ─── */}
-            <div className="relative mb-2">
-              <AnimatePresence mode="wait">
-                {state.dice && (
-                  <motion.div
-                    key={rollKey}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="flex flex-col items-center py-3"
-                  >
-                    <RollingDice
-                      dice={state.dice}
-                      onComplete={() => setRollComplete(true)}
-                    />
+            {/* ─── TWO-COLUMN LAYOUT ─── */}
+            <div className="flex flex-col lg:flex-row gap-4">
 
-                    {/* Sum + Description */}
-                    {rollComplete && diceSum !== null && (
+              {/* ─── LEFT COLUMN: Dice + Roll + Shooter + History ─── */}
+              <div className="flex-1 min-w-0">
+                {/* ─── DICE AREA ─── */}
+                <div className="relative mb-2">
+                  <AnimatePresence mode="wait">
+                    {state.dice && (
                       <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex flex-col items-center mt-2"
+                        key={rollKey}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="flex flex-col items-center py-3"
                       >
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center font-mono text-xl font-black mb-1"
-                          style={{
-                            background: state.sevenOut
-                              ? "linear-gradient(135deg, #EF4444, #DC2626)"
-                              : (diceSum === 7 || diceSum === 11) && state.phase === "come-out"
-                              ? "linear-gradient(135deg, #4ADE80, #22C55E)"
-                              : diceSum === state.point
-                              ? "linear-gradient(135deg, #FFD700, #FFA500)"
-                              : "linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))",
-                            color: state.sevenOut ? "#fff"
-                              : (diceSum === 7 || diceSum === 11) ? "#fff"
-                              : diceSum === state.point ? "#000"
-                              : "#fff",
-                            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-                          }}
-                        >
-                          {diceSum}
-                        </div>
-                        {state.lastDescription && (
+                        <RollingDice
+                          dice={state.dice}
+                          onComplete={() => setRollComplete(true)}
+                        />
+
+                        {/* Sum + Description */}
+                        {rollComplete && diceSum !== null && (
                           <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="px-4 py-1 rounded-full text-xs font-bold"
-                            style={{
-                              background: state.sevenOut
-                                ? "rgba(239,68,68,0.2)"
-                                : state.roundOver
-                                ? "rgba(74,222,128,0.2)"
-                                : "rgba(255,255,255,0.1)",
-                              color: state.sevenOut
-                                ? "#FF6B6B"
-                                : state.roundOver
-                                ? "#4ADE80"
-                                : "#fff",
-                            }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex flex-col items-center mt-2"
                           >
-                            {state.lastDescription}
+                            <div
+                              className="w-12 h-12 rounded-full flex items-center justify-center font-mono text-xl font-black mb-1"
+                              style={{
+                                background: state.sevenOut
+                                  ? "linear-gradient(135deg, #EF4444, #DC2626)"
+                                  : (diceSum === 7 || diceSum === 11) && state.phase === "come-out"
+                                  ? "linear-gradient(135deg, #4ADE80, #22C55E)"
+                                  : diceSum === state.point
+                                  ? "linear-gradient(135deg, #FFD700, #FFA500)"
+                                  : "linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))",
+                                color: state.sevenOut ? "#fff"
+                                  : (diceSum === 7 || diceSum === 11) ? "#fff"
+                                  : diceSum === state.point ? "#000"
+                                  : "#fff",
+                                boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+                              }}
+                            >
+                              {diceSum}
+                            </div>
+                            {state.lastDescription && (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="px-4 py-1 rounded-full text-xs font-bold"
+                                style={{
+                                  background: state.sevenOut
+                                    ? "rgba(239,68,68,0.2)"
+                                    : state.roundOver
+                                    ? "rgba(74,222,128,0.2)"
+                                    : "rgba(255,255,255,0.1)",
+                                  color: state.sevenOut
+                                    ? "#FF6B6B"
+                                    : state.roundOver
+                                    ? "#4ADE80"
+                                    : "#fff",
+                                }}
+                              >
+                                {state.lastDescription}
+                              </motion.div>
+                            )}
+                          </motion.div>
+                        )}
+
+                        {/* Per-player results */}
+                        {rollComplete && state.results && showResults && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-2 w-full max-w-xs"
+                          >
+                            {state.turnOrder.map((pid) => {
+                              const r = state.results?.[pid];
+                              if (!r || (!r.result && r.amount === 0)) return null;
+                              return (
+                                <div key={pid} className="text-center text-[11px] mb-0.5">
+                                  <span className="text-white/50">{pid === playerId ? "You" : getPlayerName(pid)}: </span>
+                                  <span style={{ color: r.amount > 0 ? "#4ADE80" : r.amount < 0 ? "#FF6B6B" : "#888" }}>
+                                    {r.result} {r.amount > 0 ? `+$${r.amount}` : r.amount < 0 ? `-$${Math.abs(r.amount)}` : ""}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+
+                        {/* Inline results for non-round-over */}
+                        {rollComplete && state.results && !state.roundOver && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-1 w-full max-w-xs"
+                          >
+                            {state.turnOrder.map((pid) => {
+                              const r = state.results?.[pid];
+                              if (!r || (!r.result && r.amount === 0)) return null;
+                              return (
+                                <div key={pid} className="text-center text-[10px]">
+                                  <span className="text-white/40">{pid === playerId ? "You" : getPlayerName(pid)}: </span>
+                                  <span style={{ color: r.amount > 0 ? "#4ADE80" : r.amount < 0 ? "#FF6B6B" : "#888" }}>
+                                    {r.amount > 0 ? `+$${r.amount}` : r.amount < 0 ? `-$${Math.abs(r.amount)}` : "$0"}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </motion.div>
                         )}
                       </motion.div>
                     )}
+                  </AnimatePresence>
 
-                    {/* Per-player results */}
-                    {rollComplete && state.results && showResults && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-2 w-full max-w-xs"
+                  {/* Roll button — shown when no dice are displayed and shooter */}
+                  {!state.dice && isShooter && (
+                    <div className="flex justify-center py-3">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.92 }}
+                        onClick={() => sendAction("roll")}
+                        className="px-8 py-3.5 rounded-2xl text-base font-bold uppercase tracking-wider"
+                        style={{
+                          background: "linear-gradient(135deg, #EF4444, #DC2626)",
+                          color: "#fff",
+                          boxShadow: "0 8px 30px rgba(239,68,68,0.4)",
+                        }}
                       >
-                        {state.turnOrder.map((pid) => {
-                          const r = state.results?.[pid];
-                          if (!r || (!r.result && r.amount === 0)) return null;
-                          return (
-                            <div key={pid} className="text-center text-[11px] mb-0.5">
-                              <span className="text-white/50">{pid === playerId ? "You" : getPlayerName(pid)}: </span>
-                              <span style={{ color: r.amount > 0 ? "#4ADE80" : r.amount < 0 ? "#FF6B6B" : "#888" }}>
-                                {r.result} {r.amount > 0 ? `+$${r.amount}` : r.amount < 0 ? `-$${Math.abs(r.amount)}` : ""}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
+                        🎲 Roll the Dice
+                      </motion.button>
+                    </div>
+                  )}
 
-                    {/* Inline results for non-round-over */}
-                    {rollComplete && state.results && !state.roundOver && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-1 w-full max-w-xs"
-                      >
-                        {state.turnOrder.map((pid) => {
-                          const r = state.results?.[pid];
-                          if (!r || (!r.result && r.amount === 0)) return null;
-                          return (
-                            <div key={pid} className="text-center text-[10px]">
-                              <span className="text-white/40">{pid === playerId ? "You" : getPlayerName(pid)}: </span>
-                              <span style={{ color: r.amount > 0 ? "#4ADE80" : r.amount < 0 ? "#FF6B6B" : "#888" }}>
-                                {r.amount > 0 ? `+$${r.amount}` : r.amount < 0 ? `-$${Math.abs(r.amount)}` : "$0"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Roll button — shown when no dice are displayed and shooter */}
-              {!state.dice && isShooter && (
-                <div className="flex justify-center py-3">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.92 }}
-                    onClick={() => sendAction("roll")}
-                    className="px-8 py-3.5 rounded-2xl text-base font-bold uppercase tracking-wider"
-                    style={{
-                      background: "linear-gradient(135deg, #EF4444, #DC2626)",
-                      color: "#fff",
-                      boxShadow: "0 8px 30px rgba(239,68,68,0.4)",
-                    }}
-                  >
-                    🎲 Roll the Dice
-                  </motion.button>
-                </div>
-              )}
-
-              {!state.dice && !isShooter && (
-                <div className="text-center py-3">
-                  <div className="text-white/30 text-sm">Waiting for {shooterName} to roll...</div>
-                </div>
-              )}
-            </div>
-
-            {/* ─── CRAPS BETTING BOARD ─── */}
-            <div className="rounded-2xl overflow-hidden border border-white/10 mb-2"
-              style={{ background: "rgba(0,80,0,0.6)", backdropFilter: "blur(8px)" }}
-            >
-              {/* Place numbers row (only during point phase) */}
-              {state.phase === "point" && (
-                <div className="grid grid-cols-6 gap-px bg-white/10">
-                  {placeNumbers.map(({ num, type, color }) => (
-                    <motion.button
-                      key={type}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handlePlaceBet(type)}
-                      className="relative p-2 text-center"
-                      style={{
-                        background: num === state.point
-                          ? `${color}30`
-                          : `${color}10`,
-                        borderBottom: num === state.point ? `2px solid ${color}` : "none",
-                      }}
-                    >
-                      <div className="text-lg font-mono font-bold" style={{ color }}>{num}</div>
-                      <div className="text-[7px] font-bold uppercase" style={{ color: `${color}88` }}>Place</div>
-                      {renderChipsOnCell(type)}
-                    </motion.button>
-                  ))}
-                </div>
-              )}
-
-              {/* Don't Pass / Pass Line */}
-              <div className="grid grid-cols-2 gap-px bg-white/10">
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => handlePlaceBet("dontpass")}
-                  className="relative p-2.5 text-center"
-                  style={{ background: "rgba(239,68,68,0.1)" }}
-                >
-                  <div className="text-[11px] font-bold text-red-400 uppercase tracking-wide">Don&apos;t Pass</div>
-                  <div className="text-[7px] text-red-300/50 mt-0.5">Bar 12</div>
-                  {renderChipsOnCell("dontpass")}
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => handlePlaceBet("pass")}
-                  className="relative p-2.5 text-center"
-                  style={{ background: "rgba(74,222,128,0.1)" }}
-                >
-                  <div className="text-[11px] font-bold text-green-400 uppercase tracking-wide">Pass Line</div>
-                  <div className="text-[7px] text-green-300/50 mt-0.5">Win 7/11</div>
-                  {renderChipsOnCell("pass")}
-                </motion.button>
-              </div>
-
-              {/* Field bet */}
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handlePlaceBet("field")}
-                className="relative w-full p-2.5 text-center border-t border-white/10"
-                style={{ background: "rgba(245,158,11,0.08)" }}
-              >
-                <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Field</div>
-                <div className="flex items-center justify-center gap-1 mt-0.5">
-                  {[2, 3, 4, 9, 10, 11, 12].map((n) => (
-                    <span
-                      key={n}
-                      className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-mono font-bold"
-                      style={{
-                        background: n === 2 || n === 12 ? "rgba(255,215,0,0.3)" : "rgba(255,255,255,0.08)",
-                        color: n === 2 || n === 12 ? "#FFD700" : "#F59E0B",
-                      }}
-                    >
-                      {n}
-                    </span>
-                  ))}
-                </div>
-                <div className="text-[7px] text-amber-300/50 mt-0.5">2 &amp; 12 pay 2x</div>
-                {renderChipsOnCell("field")}
-              </motion.button>
-            </div>
-
-            {/* ─── CHIP SELECTOR ─── */}
-            <div
-              className="mb-2 rounded-xl px-3 py-2"
-              style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)" }}
-            >
-              <div className="flex gap-1.5 justify-center">
-                {BET_CHIPS
-                  .filter((amt) => amt >= table.min_bet && amt <= table.max_bet)
-                  .map((amt) => (
-                    <motion.button
-                      key={amt}
-                      whileTap={{ scale: 0.92 }}
-                      onClick={() => setSelectedChip(amt)}
-                      className="w-11 h-11 rounded-full font-mono text-[10px] font-bold flex items-center justify-center transition-all"
-                      style={{
-                        background: selectedChip === amt
-                          ? "linear-gradient(135deg, #FFD700, #B8860B)"
-                          : "rgba(255,255,255,0.08)",
-                        color: selectedChip === amt ? "#000" : "#777",
-                        boxShadow: selectedChip === amt ? "0 4px 16px rgba(255,215,0,0.3)" : "none",
-                        border: selectedChip === amt ? "2px solid #FFD700" : "2px solid rgba(255,255,255,0.1)",
-                      }}
-                    >
-                      ${amt}
-                    </motion.button>
-                  ))}
-              </div>
-            </div>
-
-            {/* ─── MY BETS SUMMARY ─── */}
-            {myBets.length > 0 && (
-              <div className="mb-2">
-                <div className="flex flex-wrap gap-1 justify-center">
-                  {myBets.map((bet, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="px-2 py-0.5 rounded-lg text-[8px] font-bold"
-                      style={{
-                        background: "rgba(255,215,0,0.1)",
-                        color: "#FFD700",
-                        border: "1px solid rgba(255,215,0,0.2)",
-                      }}
-                    >
-                      {bet.type.startsWith("place") ? `Place ${bet.type.replace("place", "")}` : bet.type === "dontpass" ? "Don't Pass" : bet.type.charAt(0).toUpperCase() + bet.type.slice(1)} ${bet.amount}
-                    </motion.div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-center gap-3 mt-1">
-                  <span className="text-casino-gold text-[10px] font-mono">Total: ${myTotalBet}</span>
-                  {!diceRolling && (
-                    <button
-                      onClick={() => sendAction("clear-bets")}
-                      className="text-[9px] text-white/30 hover:text-white/60 underline"
-                    >
-                      Clear
-                    </button>
+                  {!state.dice && !isShooter && (
+                    <div className="text-center py-3">
+                      <div className="text-white/30 text-sm">Waiting for {shooterName} to roll...</div>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
 
-            {/* ─── ROLL HISTORY ─── */}
-            {state.rollHistory.length > 0 && (
-              <div className="mb-3">
-                <div className="text-white/20 text-[7px] uppercase tracking-wider mb-1 text-center">History</div>
-                <div className="flex gap-1 justify-center flex-wrap">
-                  {state.rollHistory.slice(-16).map((roll, i) => (
-                    <div
-                      key={i}
-                      className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-mono font-bold"
-                      style={{
-                        background: roll.sum === 7
-                          ? "rgba(239,68,68,0.2)"
-                          : roll.sum === state.point
-                          ? "rgba(255,215,0,0.2)"
-                          : "rgba(255,255,255,0.06)",
-                        color: roll.sum === 7
-                          ? "#FF6B6B"
-                          : roll.sum === state.point
-                          ? "#FFD700"
-                          : "#555",
-                      }}
-                    >
-                      {roll.sum}
+                {/* ─── ROLL HISTORY ─── */}
+                {state.rollHistory.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-white/20 text-[7px] uppercase tracking-wider mb-1 text-center">History</div>
+                    <div className="flex gap-1 justify-center flex-wrap">
+                      {state.rollHistory.slice(-16).map((roll, i) => (
+                        <div
+                          key={i}
+                          className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-mono font-bold"
+                          style={{
+                            background: roll.sum === 7
+                              ? "rgba(239,68,68,0.2)"
+                              : roll.sum === state.point
+                              ? "rgba(255,215,0,0.2)"
+                              : "rgba(255,255,255,0.06)",
+                            color: roll.sum === 7
+                              ? "#FF6B6B"
+                              : roll.sum === state.point
+                              ? "#FFD700"
+                              : "#555",
+                          }}
+                        >
+                          {roll.sum}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* ─── RIGHT COLUMN: Betting Board + Chips + Bets ─── */}
+              <div className="flex-1 min-w-0">
+                {/* ─── CRAPS BETTING BOARD ─── */}
+                <div className="rounded-2xl overflow-hidden border border-white/10 mb-2"
+                  style={{ background: "rgba(0,80,0,0.6)", backdropFilter: "blur(8px)" }}
+                >
+                  {/* Place numbers row (only during point phase) */}
+                  {state.phase === "point" && (
+                    <div className="grid grid-cols-6 gap-px bg-white/10">
+                      {placeNumbers.map(({ num, type, color }) => (
+                        <motion.button
+                          key={type}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handlePlaceBet(type)}
+                          className="relative p-2 text-center"
+                          style={{
+                            background: num === state.point
+                              ? `${color}30`
+                              : `${color}10`,
+                            borderBottom: num === state.point ? `2px solid ${color}` : "none",
+                          }}
+                        >
+                          <div className="text-lg font-mono font-bold" style={{ color }}>{num}</div>
+                          <div className="text-[7px] font-bold uppercase" style={{ color: `${color}88` }}>Place</div>
+                          {renderChipsOnCell(type)}
+                        </motion.button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Don't Pass / Pass Line */}
+                  <div className="grid grid-cols-2 gap-px bg-white/10">
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => handlePlaceBet("dontpass")}
+                      className="relative p-2.5 text-center"
+                      style={{ background: "rgba(239,68,68,0.1)" }}
+                    >
+                      <div className="text-[11px] font-bold text-red-400 uppercase tracking-wide">Don&apos;t Pass</div>
+                      <div className="text-[7px] text-red-300/50 mt-0.5">Bar 12</div>
+                      {renderChipsOnCell("dontpass")}
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => handlePlaceBet("pass")}
+                      className="relative p-2.5 text-center"
+                      style={{ background: "rgba(74,222,128,0.1)" }}
+                    >
+                      <div className="text-[11px] font-bold text-green-400 uppercase tracking-wide">Pass Line</div>
+                      <div className="text-[7px] text-green-300/50 mt-0.5">Win 7/11</div>
+                      {renderChipsOnCell("pass")}
+                    </motion.button>
+                  </div>
+
+                  {/* Field bet */}
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handlePlaceBet("field")}
+                    className="relative w-full p-2.5 text-center border-t border-white/10"
+                    style={{ background: "rgba(245,158,11,0.08)" }}
+                  >
+                    <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Field</div>
+                    <div className="flex items-center justify-center gap-1 mt-0.5">
+                      {[2, 3, 4, 9, 10, 11, 12].map((n) => (
+                        <span
+                          key={n}
+                          className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-mono font-bold"
+                          style={{
+                            background: n === 2 || n === 12 ? "rgba(255,215,0,0.3)" : "rgba(255,255,255,0.08)",
+                            color: n === 2 || n === 12 ? "#FFD700" : "#F59E0B",
+                          }}
+                        >
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-[7px] text-amber-300/50 mt-0.5">2 &amp; 12 pay 2x</div>
+                    {renderChipsOnCell("field")}
+                  </motion.button>
+                </div>
+
+                {/* ─── CHIP SELECTOR ─── */}
+                <div
+                  className="mb-2 rounded-xl px-3 py-2"
+                  style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  <div className="flex gap-1.5 justify-center">
+                    {BET_CHIPS
+                      .filter((amt) => amt >= table.min_bet && amt <= table.max_bet)
+                      .map((amt) => (
+                        <motion.button
+                          key={amt}
+                          whileTap={{ scale: 0.92 }}
+                          onClick={() => setSelectedChip(amt)}
+                          className="w-11 h-11 rounded-full font-mono text-[10px] font-bold flex items-center justify-center transition-all"
+                          style={{
+                            background: selectedChip === amt
+                              ? "linear-gradient(135deg, #FFD700, #B8860B)"
+                              : "rgba(255,255,255,0.08)",
+                            color: selectedChip === amt ? "#000" : "#777",
+                            boxShadow: selectedChip === amt ? "0 4px 16px rgba(255,215,0,0.3)" : "none",
+                            border: selectedChip === amt ? "2px solid #FFD700" : "2px solid rgba(255,255,255,0.1)",
+                          }}
+                        >
+                          ${amt}
+                        </motion.button>
+                      ))}
+                  </div>
+                </div>
+
+                {/* ─── MY BETS SUMMARY ─── */}
+                {myBets.length > 0 && (
+                  <div className="mb-2">
+                    <div className="flex flex-wrap gap-1 justify-center">
+                      {myBets.map((bet, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="px-2 py-0.5 rounded-lg text-[8px] font-bold"
+                          style={{
+                            background: "rgba(255,215,0,0.1)",
+                            color: "#FFD700",
+                            border: "1px solid rgba(255,215,0,0.2)",
+                          }}
+                        >
+                          {bet.type.startsWith("place") ? `Place ${bet.type.replace("place", "")}` : bet.type === "dontpass" ? "Don't Pass" : bet.type.charAt(0).toUpperCase() + bet.type.slice(1)} ${bet.amount}
+                        </motion.div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-center gap-3 mt-1">
+                      <span className="text-casino-gold text-[10px] font-mono">Total: ${myTotalBet}</span>
+                      {!diceRolling && (
+                        <button
+                          onClick={() => sendAction("clear-bets")}
+                          className="text-[9px] text-white/30 hover:text-white/60 underline"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
           </div>
         </div>
 
@@ -732,10 +743,10 @@ function TableBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/craps2.png"
+        src="/CrapsV2.png"
         alt=""
         fill
-        className="object-cover object-top"
+        className="object-cover object-center"
         priority
       />
       <div

@@ -21,22 +21,22 @@ interface IsometricFloorProps {
   onLogout: () => void;
 }
 
-// Tap zones mapped to actual table positions in casino.png (percentages of image)
+// Tap zones mapped to actual table positions in CasinoV2.png (percentages of image)
 const TAP_ZONES = [
-  // Poker — centered around x:72% y:23%
-  { id: "poker", gameType: "poker", label: "Poker", top: 17, left: 55, width: 25, height: 12 },
-  // Blackjack — around x:26-40% y:40%
-  { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 33, left: 14, width: 38, height: 14 },
-  // Slots — left side machines, y:49% down to y:79%
-  { id: "slots", gameType: "slots", label: "Slots", top: 49, left: 0, width: 24, height: 30 },
-  // Craps — centered around x:74% y:61%
-  { id: "craps", gameType: "craps", label: "Craps", top: 54, left: 54, width: 42, height: 14 },
-  // Roulette — centered around x:76% y:78%
-  { id: "roulette", gameType: "roulette", label: "Roulette", top: 71, left: 54, width: 42, height: 14 },
-  // Bar — top left area
-  { id: "bar", gameType: "bar", label: "The Bar", top: 17, left: 81, width: 19, height: 14 },
-  // Make Money — bottom right corner below roulette
-  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 85, left: 15, width: 40, height: 14 },
+  // Poker — top-left green table area
+  { id: "poker", gameType: "poker", label: "Poker", top: 8, left: 5, width: 22, height: 18 },
+  // Blackjack — mid-left semicircle table
+  { id: "blackjack", gameType: "blackjack", label: "Blackjack", top: 22, left: 2, width: 17, height: 18 },
+  // Slots — slot tournament area on right wall
+  { id: "slots", gameType: "slots", label: "Slots", top: 5, left: 78, width: 22, height: 20 },
+  // Craps — center area
+  { id: "craps", gameType: "craps", label: "Craps", top: 32, left: 22, width: 22, height: 16 },
+  // Roulette — center-right area
+  { id: "roulette", gameType: "roulette", label: "Roulette", top: 28, left: 46, width: 22, height: 18 },
+  // Bar — top-center area
+  { id: "bar", gameType: "bar", label: "The Bar", top: 5, left: 35, width: 20, height: 12 },
+  // Make Money — bottom-center area
+  { id: "makemoney", gameType: "makemoney", label: "Make Money", top: 80, left: 30, width: 40, height: 14 },
 ];
 
 const BOUNDS = { minX: 5, maxX: 95, minY: 16, maxY: 92 };
@@ -56,7 +56,7 @@ export default function IsometricFloor({
     gameType: string;
     label: string;
   } | null>(null);
-  const [imgSize, setImgSize] = useState({ w: 390, h: 844, x: 0 });
+  const [imgSize, setImgSize] = useState({ w: 1920, h: 1071, x: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { casinoTables, casinoSeats, playerStats, sitDown } = useCasinoFloor();
@@ -337,7 +337,7 @@ export default function IsometricFloor({
     function calc() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const imgAspect = 704 / 1520;
+      const imgAspect = 2752 / 1536;
 
       let w: number, h: number, x: number;
       if (vw / vh < imgAspect) {
@@ -534,13 +534,34 @@ export default function IsometricFloor({
       >
         {/* Casino floor image fills this container exactly */}
         <Image
-          src="/casino-floor.png"
+          src="/CasinoV2.png"
           alt="Casino Floor"
           fill
           className="object-fill pointer-events-none"
           style={{ imageRendering: "pixelated" }}
           priority
         />
+
+        {/* DEBUG: Tap zone overlay — remove after mapping */}
+        {TAP_ZONES.map((zone) => (
+          <div
+            key={zone.id}
+            className="absolute pointer-events-none z-[5]"
+            style={{
+              top: `${zone.top}%`,
+              left: `${zone.left}%`,
+              width: `${zone.width}%`,
+              height: `${zone.height}%`,
+              border: "2px solid rgba(255,0,255,0.8)",
+              background: "rgba(255,0,255,0.15)",
+              borderRadius: 4,
+            }}
+          >
+            <span className="absolute top-0 left-0 text-[10px] font-bold text-white bg-black/70 px-1 rounded-br">
+              {zone.label}
+            </span>
+          </div>
+        ))}
 
         {/* My avatar */}
         <motion.div

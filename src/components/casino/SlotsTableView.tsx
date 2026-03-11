@@ -171,7 +171,7 @@ export default function SlotsTableView({
           </div>
 
           {/* Seats */}
-          <div className="relative mx-auto mb-8" style={{ maxWidth: 380 }}>
+          <div className="relative mx-auto mb-8" style={{ maxWidth: 600 }}>
             <div className="flex justify-center gap-4">
               {Array.from({ length: Math.min(table.max_seats, 4) }).map((_, i) => {
                 const seat = seats.find((s) => s.seat_number === i + 1);
@@ -435,10 +435,10 @@ function SlotsBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/slots-bg.png"
+        src="/SlotsV2.png"
         alt=""
         fill
-        className="object-cover object-top"
+        className="object-cover object-center"
         style={{ imageRendering: "pixelated" }}
         priority
       />
@@ -495,7 +495,7 @@ function SlotMachineFrame({
       transition={{ duration: 0.5, repeat: highlight ? Infinity : 0 }}
     >
       <div
-        className="rounded-xl px-4 py-3"
+        className="rounded-xl px-4 py-3 w-[280px] sm:w-[340px] md:w-[400px]"
         style={{
           background: "linear-gradient(180deg, #1a1028, #120a1e)",
           border: "2px solid #2a2040",

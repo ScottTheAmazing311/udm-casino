@@ -139,7 +139,7 @@ export default function RouletteTableView({
             </div>
           </div>
 
-          <div className="relative mx-auto mb-8" style={{ maxWidth: 380 }}>
+          <div className="relative mx-auto mb-8" style={{ maxWidth: 600 }}>
             <div className="pt-32 pb-6">
               <div className="flex justify-center gap-4">
                 {Array.from({ length: Math.min(table.max_seats, 8) }).map((_, i) => {
@@ -245,7 +245,7 @@ export default function RouletteTableView({
 
         {/* Roulette Board */}
         <div className="relative z-10 flex-1 overflow-auto px-2 py-2">
-          <div className="max-w-[380px] mx-auto">
+          <div className="max-w-2xl mx-auto">
             {/* Zero */}
             <BoardCell
               label="0"
@@ -257,7 +257,7 @@ export default function RouletteTableView({
             />
 
             {/* Number grid */}
-            <div className="grid grid-cols-3 gap-[2px] mb-1">
+            <div className="grid grid-cols-3 gap-[3px] mb-1">
               {BOARD_NUMBERS.map((row) =>
                 row.map((n) => {
                   const color = getNumberColor(n);
@@ -266,7 +266,7 @@ export default function RouletteTableView({
                       key={n}
                       label={`${n}`}
                       bg={color === "red" ? "#c0392b" : "#1a1a2e"}
-                      className="h-9 rounded text-white font-bold text-xs border border-white/10"
+                      className="h-11 rounded text-white font-bold text-sm border border-white/10"
                       bets={cellBets[getCellKey("straight", n)]}
                       currentPlayerId={playerId}
                       onClick={() => placeBet({ type: "straight", number: n, label: `${n}` })}
@@ -552,10 +552,10 @@ function TableBg() {
   return (
     <div className="absolute inset-0 z-0">
       <Image
-        src="/roulette.png"
+        src="/RouletteV2.png"
         alt=""
         fill
-        className="object-cover object-top"
+        className="object-cover object-center"
         priority
       />
       <div
