@@ -746,6 +746,7 @@ function TableBg() {
         src="/CrapsV2.png"
         alt=""
         fill
+        unoptimized
         className="object-cover object-center"
         priority
       />

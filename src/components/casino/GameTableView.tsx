@@ -701,6 +701,7 @@ function TableBackground({ gameType }: { gameType: string }) {
         src={bgSrc}
         alt=""
         fill
+        unoptimized
         className="object-cover object-center"
         priority
       />

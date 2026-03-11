@@ -555,6 +555,7 @@ function TableBg() {
         src="/RouletteV2.png"
         alt=""
         fill
+        unoptimized
         className="object-cover object-center"
         priority
       />

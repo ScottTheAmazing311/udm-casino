@@ -438,6 +438,7 @@ function SlotsBg() {
         src="/SlotsV2.png"
         alt=""
         fill
+        unoptimized
         className="object-cover object-center"
         style={{ imageRendering: "pixelated" }}
         priority
