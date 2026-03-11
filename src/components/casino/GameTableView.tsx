@@ -686,10 +686,10 @@ function BlackjackTableView({
 // Map game types to their background images
 const GAME_BACKGROUNDS: Record<string, string> = {
   blackjack: "/blackjackV2.png",
-  poker: "/poker2.png",
-  craps: "/craps-table-bg.png",
-  roulette: "/roulette.png",
-  slots: "/slots-bg.png",
+  poker: "/PokerV2.png",
+  craps: "/CrapsV2.png",
+  roulette: "/RouletteV2.png",
+  slots: "/SlotsV2.png",
 };
 
 function TableBackground({ gameType }: { gameType: string }) {

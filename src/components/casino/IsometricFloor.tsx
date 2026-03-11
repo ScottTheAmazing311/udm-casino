@@ -542,27 +542,6 @@ export default function IsometricFloor({
           priority
         />
 
-        {/* DEBUG: Tap zone overlay — remove after mapping */}
-        {TAP_ZONES.map((zone) => (
-          <div
-            key={zone.id}
-            className="absolute pointer-events-none z-[5]"
-            style={{
-              top: `${zone.top}%`,
-              left: `${zone.left}%`,
-              width: `${zone.width}%`,
-              height: `${zone.height}%`,
-              border: "2px solid rgba(255,0,255,0.8)",
-              background: "rgba(255,0,255,0.15)",
-              borderRadius: 4,
-            }}
-          >
-            <span className="absolute top-0 left-0 text-[10px] font-bold text-white bg-black/70 px-1 rounded-br">
-              {zone.label}
-            </span>
-          </div>
-        ))}
-
         {/* My avatar */}
         <motion.div
           className="absolute z-10 flex flex-col items-center pointer-events-none"
