@@ -36,13 +36,12 @@ export function fieldMultiplier(sum: number): number {
   return 0;
 }
 
-// Place bets pay 7:6 for 6/8
-export function placeWin(sum: number, placeNumber: 6 | 8): boolean {
-  return sum === placeNumber;
-}
-
-export function placeLoss(sum: number): boolean {
-  return sum === 7;
+// Place bets: 7:6 for 6/8, 7:5 for 5/9, 9:5 for 4/10
+export function placePayMultiplier(placeNum: number): { pays: number; costs: number } {
+  if (placeNum === 6 || placeNum === 8) return { pays: 7, costs: 6 };
+  if (placeNum === 5 || placeNum === 9) return { pays: 7, costs: 5 };
+  if (placeNum === 4 || placeNum === 10) return { pays: 9, costs: 5 };
+  return { pays: 1, costs: 1 };
 }
 
 // Resolve all bets for all players after a roll
@@ -57,12 +56,16 @@ export function resolveRoll(
   newPoint: number | null;
   newPhase: CrapsPhase;
   description: string;
+  roundOver: boolean; // true = bets cleared, new round starts
+  sevenOut: boolean;
 } {
   const sum = diceSum(dice);
   const results: Record<number, CrapsResult> = {};
   let newPoint = point;
   let newPhase: CrapsPhase = phase;
   let description = "";
+  let roundOver = false;
+  let sevenOut = false;
 
   // Initialize results for all players
   for (const pid of turnOrder) {
@@ -74,7 +77,7 @@ export function resolveRoll(
 
     if (outcome === "natural") {
       description = sum === 7 ? "Natural 7!" : "Yo 11!";
-      // Pass wins, Don't Pass loses
+      roundOver = true;
       for (const pid of turnOrder) {
         const playerBets = bets[pid] || [];
         let totalAmount = 0;
@@ -101,10 +104,11 @@ export function resolveRoll(
 
         results[pid] = { result: parts.join(", ") || "No bet", amount: totalAmount };
       }
-      newPhase = "resolving";
+      // Stay in come-out for next roll (same shooter)
+      newPhase = "come-out";
     } else if (outcome === "craps") {
       description = sum === 2 ? "Snake Eyes!" : sum === 3 ? "Ace Deuce!" : "Boxcars!";
-      // Pass loses, Don't Pass wins (except 12 is push for Don't Pass)
+      roundOver = true;
       for (const pid of turnOrder) {
         const playerBets = bets[pid] || [];
         let totalAmount = 0;
@@ -135,7 +139,8 @@ export function resolveRoll(
 
         results[pid] = { result: parts.join(", ") || "No bet", amount: totalAmount };
       }
-      newPhase = "resolving";
+      // Stay in come-out for next roll (same shooter)
+      newPhase = "come-out";
     } else {
       // Point established
       newPoint = sum;
@@ -172,6 +177,7 @@ export function resolveRoll(
 
     if (outcome === "hit") {
       description = `Hit the point ${point}!`;
+      roundOver = true;
       for (const pid of turnOrder) {
         const playerBets = bets[pid] || [];
         let totalAmount = 0;
@@ -193,23 +199,25 @@ export function resolveRoll(
               totalAmount -= bet.amount;
               parts.push(`Field -$${bet.amount}`);
             }
-          } else if (bet.type === "place6" && sum === 6) {
-            const win = Math.floor(bet.amount * 7 / 6);
-            totalAmount += win;
-            parts.push(`Place 6 +$${win}`);
-          } else if (bet.type === "place8" && sum === 8) {
-            const win = Math.floor(bet.amount * 7 / 6);
-            totalAmount += win;
-            parts.push(`Place 8 +$${win}`);
+          } else if (bet.type.startsWith("place")) {
+            const placeNum = parseInt(bet.type.replace("place", ""));
+            if (sum === placeNum) {
+              const { pays, costs } = placePayMultiplier(placeNum);
+              const win = Math.floor(bet.amount * pays / costs);
+              totalAmount += win;
+              parts.push(`Place ${placeNum} +$${win}`);
+            }
           }
         }
 
         results[pid] = { result: parts.join(", ") || "No bet", amount: totalAmount };
       }
       newPoint = null;
-      newPhase = "resolving";
+      newPhase = "come-out"; // same shooter continues
     } else if (outcome === "seven-out") {
       description = "Seven out!";
+      roundOver = true;
+      sevenOut = true;
       for (const pid of turnOrder) {
         const playerBets = bets[pid] || [];
         let totalAmount = 0;
@@ -225,18 +233,19 @@ export function resolveRoll(
           } else if (bet.type === "field") {
             totalAmount -= bet.amount;
             parts.push(`Field -$${bet.amount}`);
-          } else if (bet.type === "place6" || bet.type === "place8") {
+          } else if (bet.type.startsWith("place")) {
             totalAmount -= bet.amount;
-            parts.push(`${bet.type === "place6" ? "Place 6" : "Place 8"} -$${bet.amount}`);
+            const placeNum = bet.type.replace("place", "");
+            parts.push(`Place ${placeNum} -$${bet.amount}`);
           }
         }
 
         results[pid] = { result: parts.join(", ") || "No bet", amount: totalAmount };
       }
       newPoint = null;
-      newPhase = "resolving";
+      newPhase = "come-out"; // new shooter
     } else {
-      // Continue — resolve field bets and place bets only
+      // Continue — resolve field bets and place bets that hit
       description = `Rolled ${sum}`;
       for (const pid of turnOrder) {
         const playerBets = bets[pid] || [];
@@ -253,14 +262,15 @@ export function resolveRoll(
               totalAmount -= bet.amount;
               parts.push(`Field -$${bet.amount}`);
             }
-          } else if (bet.type === "place6" && sum === 6) {
-            const win = Math.floor(bet.amount * 7 / 6);
-            totalAmount += win;
-            parts.push(`Place 6 +$${win}`);
-          } else if (bet.type === "place8" && sum === 8) {
-            const win = Math.floor(bet.amount * 7 / 6);
-            totalAmount += win;
-            parts.push(`Place 8 +$${win}`);
+          } else if (bet.type.startsWith("place")) {
+            const placeNum = parseInt(bet.type.replace("place", ""));
+            if (sum === placeNum) {
+              const { pays, costs } = placePayMultiplier(placeNum);
+              const win = Math.floor(bet.amount * pays / costs);
+              totalAmount += win;
+              parts.push(`Place ${placeNum} +$${win}`);
+            }
+            // Place bets stay active, don't lose unless seven-out
           }
         }
 
@@ -268,10 +278,10 @@ export function resolveRoll(
           results[pid] = { result: parts.join(", "), amount: totalAmount };
         }
       }
-      // Stay in point phase, don't go to resolving
+      // Stay in point phase
       newPhase = "point";
     }
   }
 
-  return { results, newPoint, newPhase, description };
+  return { results, newPoint, newPhase, description, roundOver, sevenOut };
 }

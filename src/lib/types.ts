@@ -29,7 +29,7 @@ export interface PokerHandEval {
   name: string;
 }
 
-export type CrapsBetType = "pass" | "dontpass" | "field" | "come" | "dontcome" | "place6" | "place8";
+export type CrapsBetType = "pass" | "dontpass" | "field" | "place4" | "place5" | "place6" | "place8" | "place9" | "place10";
 
 export interface CrapsBet {
   type: CrapsBetType;
@@ -42,16 +42,18 @@ export interface CrapsResult {
   amount: number;
 }
 
-export type CrapsPhase = "betting" | "come-out" | "point" | "resolving";
+export type CrapsPhase = "come-out" | "point";
 
 export interface CrapsGameState {
   phase: CrapsPhase;
   bets: Record<number, CrapsBet[]>;
-  readyPlayers: number[];
   dice: [number, number] | null;
   point: number | null;
   shooterIndex: number;
   results: Record<number, CrapsResult> | null;
+  lastDescription: string | null;
+  roundOver: boolean;
+  sevenOut: boolean;
   turnOrder: number[];
   rollHistory: { dice: [number, number]; sum: number }[];
 }

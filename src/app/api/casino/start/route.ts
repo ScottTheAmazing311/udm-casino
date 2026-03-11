@@ -69,13 +69,15 @@ export async function POST(request: Request) {
       }
     : table.game_type === "craps"
     ? {
-        phase: "betting",
+        phase: "come-out",
         bets: {},
-        readyPlayers: [],
         dice: null,
         point: null,
         shooterIndex: 0,
         results: null,
+        lastDescription: null,
+        roundOver: false,
+        sevenOut: false,
         turnOrder,
         rollHistory: [],
       }
@@ -114,9 +116,9 @@ export async function POST(request: Request) {
     .insert({
       table_id: tableId,
       game_type: table.game_type,
-      status: "betting",
+      status: table.game_type === "craps" ? "playing" : "betting",
       game_state: gameState,
-      current_turn_player_id: null,
+      current_turn_player_id: table.game_type === "craps" ? turnOrder[0] : null,
       round_number: 1,
     })
     .select()
